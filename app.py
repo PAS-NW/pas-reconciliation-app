@@ -93,7 +93,7 @@ st.markdown(
     """
     <div class="pas-hero">
       <div class="pas-title">PAS Invoice Reconciliation</div>
-      <div class="pas-subtitle">PAS NW Ltd · v9 invoice number/date stability · invoice-level approval</div>
+      <div class="pas-subtitle">PAS NW Ltd · v10 invoice number fallback · simplified export</div>
     </div>
     """,
     unsafe_allow_html=True,
@@ -329,41 +329,56 @@ def bad_invoice_number(candidate: str) -> bool:
     return any(bit in candidate for bit in bad_bits)
 
 def invoice_number_from_filename(filename: str) -> str:
-    """Use the PDF filename as a safe fallback for single-invoice files.
+    """Return a strong invoice number from the source PDF filename.
 
-    This prevents header/address text such as WA31AB, ORDER or GREATER being
-    accepted as an invoice number. Multi-invoice PDFs like Smiths X 6 do not
-    contain one clear invoice token in the filename, so they remain driven by
-    page text.
+    In practice, most single-invoice PDFs are named after the invoice number.
+    This is more reliable than PDF text extraction for suppliers where labels
+    are read in the wrong order, e.g. Kensite/Boundary headers.
+    Multi-invoice PDFs usually have descriptive names and will not match these
+    patterns, so their invoice numbers still come from page text.
     """
-    base = Path(filename).stem.upper()
+    raw = str(filename or "").split(" / record")[0]
+    base = Path(raw).stem.upper()
     base = re.sub(r"[_]+", " ", base)
+
+    # Strong alphanumeric invoice formats first.
     patterns = [
-        r"\b(I\d{3}I\d{5,})\b",   # GSF e.g. I261I022140
-        r"\b(WIN\d{4,8})\b",       # Ashley
-        r"\b(INV\d{4,9})\b",       # Fox etc
-        r"\b(\d{6,8})\b",          # Boundary/Kensite/RSS/SLD/SMT/Tyrefix
-        r"\b(\d{5}Q)\b",           # invoice refs with Q suffix if ever required
+        r"\b(I\d{3}I\d{5,})\b",      # GSF, e.g. I261I022140
+        r"\b(WIN\d{4,8})\b",          # Ashley
+        r"\b(INV\d{4,9})\b",          # Fox etc
+        r"\b(\d{5,8})Q\b",            # Kensite filenames like 915708Q ON SAGE
+        r"\b(\d{5,8})\b",             # Boundary/RSS/SLD/SMT/Tyrefix
     ]
     for pat in patterns:
         m = re.search(pat, base)
         if m:
-            return m.group(1).replace("Q", "") if re.fullmatch(r"\d{5}Q", m.group(1)) else m.group(1)
+            return m.group(1)
     return ""
 
 
 def choose_invoice_number(filename: str, extracted: str) -> str:
     file_no = invoice_number_from_filename(filename)
     extracted = clean_cell(extracted) or "Unknown"
-    # Filename wins when the extracted value is obviously a label/address/depot text.
-    if file_no and bad_invoice_number(extracted):
-        return file_no
-    # Filename also wins for standard single-invoice files where extraction glued text onto the number.
-    if file_no and extracted.upper().startswith(file_no) and extracted.upper() != file_no:
-        return file_no
-    # If the PDF extraction is unknown but filename has a strong invoice token, use it.
-    if file_no and extracted.upper() == "UNKNOWN":
-        return file_no
+    extracted_upper = extracted.upper()
+
+    # If the filename contains a strong invoice number, prefer it. This avoids
+    # glued header text such as INVOICEDATEACCOUNTNO and branch/customer lines.
+    if file_no:
+        if (
+            extracted_upper == "UNKNOWN"
+            or bad_invoice_number(extracted)
+            or len(extracted_upper) > 18
+            or not re.search(r"\d", extracted_upper)
+            or extracted_upper in {"INVOICE", "HIRE INVOICE", "SALES INVOICE"}
+        ):
+            return file_no
+        # If extracted is merely the filename number with extra junk attached, use filename.
+        if extracted_upper.startswith(file_no) and extracted_upper != file_no:
+            return file_no
+        # For standard single-invoice files, filename is normally the safest source.
+        if re.fullmatch(r"(\d{5,8}|WIN\d{4,8}|INV\d{4,9}|I\d{3}I\d{5,})", file_no):
+            return file_no
+
     return extracted
 
 
@@ -832,7 +847,6 @@ OUTPUT_COLUMNS = [
     "PDF File",
     "Invoice Number",
     "Supplier",
-    "Invoice Date",
     "Order Reference",
     "Invoice Type",
     "Plant Status",
