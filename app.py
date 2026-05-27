@@ -271,7 +271,7 @@ def extract_invoice_number(text: str) -> str:
         candidate = re.sub(r"[^A-Z0-9\-/]", "", str(candidate).upper())
         if len(candidate) < 4 or len(candidate) > 24:
             return None
-        bad_bits = ["INVOICE", "DATE", "ACCOUNT", "CUSTOMER", "PERIOD", "CHARGE", "TOTAL", "NUMBER", "CONTRACT", "ADDRESS", "SLDBOLTON", "PASNW", "PASNWLTD"]
+        bad_bits = ["INVOICE", "DATE", "ACCOUNT", "CUSTOMER", "PERIOD", "CHARGE", "TOTAL", "NUMBER", "CONTRACT", "ADDRESS", "SLDBOLTON", "PASNW", "PASNWLTD", "POCKET", "NOOK", "LANE", "ROAD", "STREET", "AVENUE", "WARRINGTON", "LOWTON", "ADDRESS"]
         if any(b in candidate for b in bad_bits):
             return None
         if candidate in ["UNKNOWN", "HIRE", "NO", "N/A"]:
@@ -279,6 +279,7 @@ def extract_invoice_number(text: str) -> str:
         return candidate
 
     patterns = [
+        r"INVOICE\s+NO\s*[:\-]\s*(\d{4,10})",
         r"Invoice\s*(?:No\.?|Number|#)\s*[:\-]?\s*([A-Z0-9][A-Z0-9\-/]{3,24})",
         r"INVOICE\s*NO\s*[:\-]?\s*([A-Z0-9][A-Z0-9\-/]{3,24})",
         r"Hire\s+Invoice\s+No\s*[:\-]?\s*([A-Z0-9][A-Z0-9\-/]{3,24})",
@@ -313,17 +314,58 @@ def extract_invoice_number(text: str) -> str:
     return "Unknown"
 
 
-def extract_invoice_date(text: str) -> str:
-    patterns = [
-        r"Invoice\s+Date\s*[:\-]?\s*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",
-        r"Date\s+of\s+Invoice\s*[:\-]?\s*(\d{1,2}[-/]?[A-Z][a-z]{2}[-/]?\d{2,4})",
-        r"Date\s*[:\-]?\s*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",
-        r"(\d{1,2}\s+[A-Z][a-z]+\s+\d{4})",
+def bad_invoice_number(candidate: str) -> bool:
+    candidate = clean_cell(candidate).upper()
+    if not candidate or candidate == "UNKNOWN":
+        return True
+    bad_bits = [
+        "INVOICE", "DATE", "ACCOUNT", "CUSTOMER", "PERIOD", "CHARGE", "TOTAL",
+        "NUMBER", "CONTRACT", "ADDRESS", "POCKET", "NOOK", "LANE", "ROAD",
+        "STREET", "AVENUE", "WARRINGTON", "LOWTON", "PAS", "SLDBOLTON"
     ]
-    for p in patterns:
-        m = re.search(p, text, re.I)
+    return any(bit in candidate for bit in bad_bits)
+
+
+def extract_invoice_date(text: str) -> str:
+    """Extract the document invoice date, not hire/delivery/due/payment dates.
+
+    Priority is given only to dates that sit next to strong document-date labels.
+    This prevents hire-period dates such as 18/05/2026 - 24/05/2026 or due dates
+    being pulled through as the invoice date.
+    """
+    def norm_date(raw: str) -> str:
+        return clean_cell(raw).replace("  ", " ")
+
+    date_token = r"(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{1,2}[-\s]?[A-Za-z]{3,9}[-\s]?\d{2,4})"
+
+    strong_patterns = [
+        rf"Date\s+of\s+Invoice\s*[:\-]?\s*{date_token}",
+        rf"Invoice\s+Date\s*[:\-]?\s*{date_token}",
+        rf"Invoice\s+dated\s*[:\-]?\s*{date_token}",
+        rf"Document\s+Date\s*[:\-]?\s*{date_token}",
+    ]
+    for pat in strong_patterns:
+        m = re.search(pat, text, re.I)
         if m:
-            return m.group(1)
+            return norm_date(m.group(1))
+
+    # Some suppliers put the invoice date on the line immediately after the label.
+    lines = [clean_cell(l) for l in text.splitlines() if clean_cell(l)]
+    for i, line in enumerate(lines[:80]):
+        if re.search(r"^(Date\s+of\s+Invoice|Invoice\s+Date|Document\s+Date)\b", line, re.I):
+            window = " ".join(lines[i:i+4])
+            m = re.search(date_token, window, re.I)
+            if m:
+                return norm_date(m.group(1))
+
+    # Weak fallback: only accept a generic 'Date:' near the invoice header, and reject known non-document labels.
+    for i, line in enumerate(lines[:60]):
+        if re.search(r"\b(Due|Hire|Delivery|Collection|From|To|Payment|Period)\b", line, re.I):
+            continue
+        m = re.search(rf"^Date\s*[:\-]?\s*{date_token}$", line, re.I)
+        if m:
+            return norm_date(m.group(1))
+
     return ""
 
 
@@ -332,6 +374,9 @@ def split_pdf_into_invoices(filename: str, pages: List[str]) -> List[Dict]:
     current = None
     for idx, page_text in enumerate(pages, start=1):
         inv_no = extract_invoice_number(page_text)
+        filename_inv_match = re.search(r"(\d{5,8})", filename)
+        if filename_inv_match and bad_invoice_number(inv_no):
+            inv_no = filename_inv_match.group(1)
         has_invoice_header = bool(re.search(r"invoice\s*(no\.?|number|#)", page_text, re.I))
         page_marker = re.search(r"Page\s+\d+\s*(?:/|of)\s*\d+", page_text, re.I)
 
@@ -727,6 +772,31 @@ def style_excel(writer, dfs: Dict[str, pd.DataFrame]):
             ws.column_dimensions[get_column_letter(idx)].width = width
 
 
+OUTPUT_COLUMNS = [
+    "PDF File",
+    "Invoice Number",
+    "Supplier",
+    "Invoice Date",
+    "Order Reference",
+    "Invoice Type",
+    "Plant Status",
+    "Agreed Rate / Value",
+    "Invoice Net Total",
+    "Match Status",
+    "Unmatched Reason",
+]
+
+
+def clean_output_df(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame(columns=OUTPUT_COLUMNS)
+    out = df.copy()
+    for col in OUTPUT_COLUMNS:
+        if col not in out.columns:
+            out[col] = ""
+    return out[OUTPUT_COLUMNS]
+
+
 def make_excel(summary_df, matched_df, unmatched_df, all_df) -> bytes:
     output = io.BytesIO()
     rules_df = pd.DataFrame({
@@ -743,9 +813,9 @@ def make_excel(summary_df, matched_df, unmatched_df, all_df) -> bytes:
     })
     dfs = {
         "Summary": summary_df,
-        "Matched": matched_df,
-        "Unmatched": unmatched_df,
-        "All Extracted Invoices": all_df,
+        "Matched": clean_output_df(matched_df),
+        "Unmatched": clean_output_df(unmatched_df),
+        "All Extracted Invoices": clean_output_df(all_df),
         "Rules": rules_df,
     }
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
@@ -801,9 +871,9 @@ if run:
         st.markdown("### Results")
         tab1, tab2 = st.tabs(["Unmatched", "All extracted invoices"])
         with tab1:
-            st.dataframe(unmatched_df, use_container_width=True, hide_index=True)
+            st.dataframe(clean_output_df(unmatched_df), use_container_width=True, hide_index=True)
         with tab2:
-            st.dataframe(all_df, use_container_width=True, hide_index=True)
+            st.dataframe(clean_output_df(all_df), use_container_width=True, hide_index=True)
 
         excel_bytes = make_excel(summary_df, matched_df, unmatched_df, all_df)
         st.download_button(
