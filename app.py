@@ -103,6 +103,7 @@ BAD_SUPPLIER_PATTERNS = [
     "customer", "customer ref", "your ref", "order no", "page", "date", "due date",
     "delivery address", "site address", "ship to", "bill to", "hire period", "total charge",
     "weekly rate", "payment", "bank", "sort code", "goods total", "invoice total", "net total",
+    "pas (nw)", "pas nw", "p a s", "pocket nook", "lowton", "warrington",
 ]
 
 MOVEMENT_TERMS = ["delivery", "collection", "haulage", "transport", "low loader", "lowloader", "uplift", "cartage", "movement", "carriage"]
@@ -255,11 +256,22 @@ def extract_invoice_number(text: str) -> str:
     """
     text = text.replace("\xa0", " ")
 
+    # SLD / Carrier invoices often show the real number as *HI312614* while
+    # "Hire Invoice No" is visually far away from the number in extracted text.
+    m_hi = re.search(r"\*\s*HI\s*(\d{5,8})\s*\*", text, flags=re.IGNORECASE)
+    if m_hi:
+        return m_hi.group(1)
+
+    # Filename/text style with a plain hire invoice number next to the HI marker.
+    m_hi2 = re.search(r"\bHI\s*(\d{5,8})\b", text, flags=re.IGNORECASE)
+    if m_hi2:
+        return m_hi2.group(1)
+
     def valid(candidate: str) -> Optional[str]:
         candidate = re.sub(r"[^A-Z0-9\-/]", "", str(candidate).upper())
         if len(candidate) < 4 or len(candidate) > 24:
             return None
-        bad_bits = ["INVOICE", "DATE", "ACCOUNT", "CUSTOMER", "PERIOD", "CHARGE", "TOTAL", "NUMBER", "CONTRACT", "ADDRESS"]
+        bad_bits = ["INVOICE", "DATE", "ACCOUNT", "CUSTOMER", "PERIOD", "CHARGE", "TOTAL", "NUMBER", "CONTRACT", "ADDRESS", "SLDBOLTON", "PASNW", "PASNWLTD"]
         if any(b in candidate for b in bad_bits):
             return None
         if candidate in ["UNKNOWN", "HIRE", "NO", "N/A"]:
@@ -379,12 +391,50 @@ def extract_account_name_supplier(text: str) -> str:
     return supplier
 
 
-def extract_supplier_candidate(text: str) -> str:
-    # First use explicit payment block supplier if present. This catches Boundary
-    # where the top/header extraction can be unreliable but the Account Name is clean.
+def extract_known_supplier_from_text(text: str) -> str:
+    """High-confidence supplier extraction from explicit supplier identifiers.
+
+    This is not matching logic. It only stops the app from using customer/address/table
+    text as a supplier where the actual supplier name is clearly printed somewhere on
+    the invoice PDF.
+    """
+    compact = re.sub(r"\s+", " ", text).strip()
+    low = compact.lower()
+
+    # Payment/account name blocks are usually the cleanest source.
     account_supplier = extract_account_name_supplier(text)
     if account_supplier:
+        if "boundary plant" in account_supplier.lower():
+            return "Boundary Plant"
         return account_supplier
+
+    # Common printed supplier names/logos/footer identifiers.
+    if "kensite" in low or "kensite services" in low:
+        return "Kensite"
+    if "sld bolton" in low or "sldpumpspower" in low or "carrier rental systems" in low:
+        return "SLD Pumps"
+    if "smiths equipment hire" in low or "smithshire" in low:
+        return "Smiths Hire"
+    if "ashley plant hire" in low:
+        return "Ashley Plant"
+    if "rope & sling specialists" in low or "rssgroup" in low:
+        return "Rope & Sling Specialists Ltd"
+    if "gsf car parts" in low:
+        return "GSF Car Parts"
+    if "tyrefix plant tyres" in low:
+        return "Tyrefix Plant Tyres (UK) Ltd"
+    if "fox brothers" in low or "fox group" in low:
+        return "Fox Brothers"
+    if "smt gb" in low or "smt.network" in low or "services machinery" in low:
+        return "SMT GB"
+    return ""
+
+
+def extract_supplier_candidate(text: str) -> str:
+    # Use high-confidence supplier identifiers before any generic header guess.
+    known_supplier = extract_known_supplier_from_text(text)
+    if known_supplier:
+        return known_supplier
 
     lines = [re.sub(r"\s+", " ", l).strip() for l in text.splitlines() if l.strip()]
     candidates = []
