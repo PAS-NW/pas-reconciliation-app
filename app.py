@@ -430,24 +430,46 @@ def extract_net_total(text: str) -> Optional[float]:
 
 
 def classify_invoice(text: str, plant_status: str = "") -> str:
-    combined = f"{plant_status} {text}".upper()
-    line_words = combined
-    if "OPERATED" in line_words or "DOZER" in line_words and ("DAYS" in line_words or "OPERATED" in line_words):
+    """Classify by Plant status first, then invoice line content.
+
+    Important: supplier headers such as "Delivery Address" must not turn a hire invoice
+    into Hire + Movement. Movement is only inferred from charge-line wording.
+    """
+    ps = safe_text(plant_status).strip().upper()
+    if ps:
+        if "OPERATED" in ps:
+            return "Operated Plant"
+        if "PURCHASE" in ps:
+            return "Purchase"
+        if "REPAIR" in ps or "MAINTENANCE" in ps:
+            return "Repair/Maintenance"
+        if "DAMAGE" in ps or "CHARGE" in ps:
+            return "Damage/Charges"
+        if "MOVEMENT" in ps or "DELIVERY" in ps or "COLLECTION" in ps or "HAULAGE" in ps:
+            return "Movement"
+        if "HIRE" in ps:
+            return "Hire"
+
+    u = safe_text(text).upper()
+    # Remove header labels that commonly appear on hire invoices but are not charge lines.
+    u_no_headers = re.sub(r"DELIVERY\s+ADDRESS|INVOICE\s+ADDRESS|SITE\s+ADDRESS|CUSTOMER\s+ADDRESS", " ", u)
+
+    if "OPERATED" in u_no_headers or ("DOZER" in u_no_headers and ("DAYS" in u_no_headers or "OPERATED" in u_no_headers)):
         return "Operated Plant"
-    if any(w in line_words for w in ["DELIVERY", "COLLECTION", "HAULAGE", "TRANSPORT", "MOVEMENT", "LOW LOADER"]):
-        # Only return pure movement if not clearly hire too
-        if any(w in line_words for w in ["HIRE", "WEEK", "HIRED", "HIRE ITEMS"]):
-            return "Hire + Movement"
-        return "Movement"
-    if any(w in line_words for w in ["PUNCTURE", "TYRE", "REPAIR", "SERVICE", "MAINTENANCE"]):
+    if any(w in u_no_headers for w in ["PUNCTURE", "TYRE", "REPAIR", "SERVICE", "MAINTENANCE"]):
         return "Repair/Maintenance"
-    if any(w in line_words for w in ["DAMAGE", "LOSS OF HIRED", "LOST", "CHARGE", "WEAR CHARGE"]):
+    if any(w in u_no_headers for w in ["DAMAGE", "LOSS OF HIRED", "LOST", "WEAR CHARGE"]):
         return "Damage/Charges"
-    if any(w in line_words for w in ["SALE ITEMS", "SALES INVOICE", "FILTER", "PART", "PCE", "PURCHASE"]):
+    if any(w in u_no_headers for w in ["SALE ITEMS", "SALES INVOICE", "FILTER", "PART", "PCE", "PURCHASE"]):
         return "Purchase"
-    if any(w in line_words for w in ["HIRE", "WEEKLY", "PER WEEK", "CONTRACT STATUS"]):
+
+    movement_charge = re.search(r"(?:^|\n).{0,80}(DELIVERY|COLLECTION|HAULAGE|TRANSPORT|MOVEMENT|LOW LOADER).{0,80}(£|\d+\.\d{2})", u_no_headers)
+    hire_word = any(w in u_no_headers for w in ["HIRE", "WEEKLY", "PER WEEK", "CONTRACT STATUS", "HIRE ITEMS"])
+    if movement_charge:
+        return "Hire + Movement" if hire_word else "Movement"
+    if hire_word:
         return "Hire"
-    return safe_text(plant_status) or "Unknown"
+    return "Unknown"
 
 
 def plant_order_key(row: pd.Series, colmap: Dict[str, Optional[str]]) -> str:
@@ -521,18 +543,13 @@ def reconcile_record(rec: Dict[str, Any], plant: pd.DataFrame, colmap: Dict[str,
             plant_status = safe_text(matched_row.get(colmap["status"]))
         inv_type = classify_invoice(text, plant_status)
 
-        # Supplier fuzzy check: useful but not enough to fail where invoice header is weak.
+        # Once a full order reference has matched to the Plant tab, treat the Plant tab supplier
+        # as the source of truth for display and matching. PDF supplier extraction is useful, but
+        # many invoices put branch names, table headings, addresses or website text above the real
+        # supplier name. Do not fail a valid PO/rate match because of weak header extraction.
         plant_supplier = safe_text(matched_row.get(colmap.get("supplier"), "")) if colmap.get("supplier") else ""
-        # If the PDF header extraction has captured a website, branch, VAT line, table heading, etc.,
-        # use the Plant-tab supplier once the order reference has matched. This avoids false supplier names
-        # like "Hire Period Total Charge" while still keeping the invoice-level match strict on value/rate.
-        if plant_supplier and is_weak_supplier_name(supplier):
+        if plant_supplier:
             supplier = plant_supplier
-        elif plant_supplier and supplier != "Unknown supplier":
-            s1, s2 = norm(plant_supplier), norm(supplier)
-            ratio = fuzz.partial_ratio(s1, s2) if fuzz else (100 if s1 in s2 or s2 in s1 else 0)
-            if ratio < 60:
-                reasons.append("Supplier mismatch")
 
         ok_value, agreed_value, value_reason = rate_value_match(values, matched_row, colmap)
         if not ok_value:
@@ -625,7 +642,7 @@ with st.sidebar:
     st.markdown("### Rules")
     for rule in RULES[:10]:
         st.markdown(f"✓ {rule}")
-    st.markdown("<br><span class='small-note'>PAS Invoice Reconciliation<br>v3.1 supplier/export fixes</span>", unsafe_allow_html=True)
+    st.markdown("<br><span class='small-note'>PAS Invoice Reconciliation<br>v3.2 Boundary supplier/type fix</span>", unsafe_allow_html=True)
 
 logo_html = ""
 if LOGO_PATH.exists():
