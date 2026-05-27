@@ -31,6 +31,11 @@ st.markdown(
     .pas-header-subtitle { color:#555555 !important; margin-top:10px; font-size:18px; }
     .stButton > button[kind="primary"] { background:#FFD400 !important; color:#0A0A0A !important; border:0 !important; font-weight:800 !important; border-radius:10px !important; }
     .stButton > button[kind="primary"]:hover { background:#e9c200 !important; color:#0A0A0A !important; }
+    .stDownloadButton > button { background:#FFD400 !important; color:#0A0A0A !important; border:0 !important; font-weight:800 !important; border-radius:10px !important; }
+    .stDownloadButton > button:hover { background:#e9c200 !important; color:#0A0A0A !important; border:0 !important; }
+    .stTabs [data-baseweb="tab-list"] { gap: 18px; }
+    .stTabs [data-baseweb="tab"] { color:#333333 !important; font-weight:700 !important; }
+    .stTabs [aria-selected="true"] { color:#FF3B3B !important; }
     [data-testid="stFileUploaderDropzone"] { background:#171820 !important; border: 1px solid #30313a !important; border-radius: 12px !important; }
     [data-testid="stFileUploaderDropzone"] * { color: #ffffff !important; }
     .stAlert { border-radius: 12px !important; }
@@ -411,13 +416,14 @@ if st.button("Run reconciliation", type="primary", disabled=not (plant_file and 
         c3.metric("Unmatched", unmatched)
         c4.metric("Match %", f"{match_pct}%")
 
-        tab1, tab2, tab3 = st.tabs(["Matched", "Unmatched", "All extracted records"])
+        # Display only the useful review tabs on-screen.
+        # Matched invoices are still included in the downloaded Excel workbook,
+        # but hidden from the app view to keep the dashboard clean.
+        tab1, tab2 = st.tabs(["Unmatched", "All extracted invoices"])
         with tab1:
-            st.dataframe(matched_df, use_container_width=True)
+            st.dataframe(unmatched_df, use_container_width=True, hide_index=True)
         with tab2:
-            st.dataframe(unmatched_df, use_container_width=True)
-        with tab3:
-            st.dataframe(results, use_container_width=True)
+            st.dataframe(results, use_container_width=True, hide_index=True)
 
         excel = make_excel(summary, matched_df, unmatched_df, rules_df)
         st.download_button(
