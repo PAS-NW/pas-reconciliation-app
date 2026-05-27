@@ -422,7 +422,7 @@ def make_excel(summary, matched_df, unmatched_df, all_df, rules_df):
             for col_num, value in enumerate(df.columns.values):
                 ws.write(0, col_num, value, header_fmt)
                 series = df[value].astype(str).replace("nan", "") if not df.empty else pd.Series(dtype=str)
-                max_len = max([len(str(value))] + [len(x) for x in series.head(500).tolist()])
+                max_len = max([len(str(value))] + [len(str(x)) for x in series.head(500).fillna("").tolist()])
                 width = min(max(max_len + 3, 12), 45)
                 ws.set_column(col_num, col_num, width, body_fmt)
             for money_col in ["Invoice Net Total", "Agreed Rate / Value"]:
