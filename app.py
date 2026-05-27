@@ -8,9 +8,12 @@ import pandas as pd
 import streamlit as st
 
 try:
-    from PyPDF2 import PdfReader
+    from pypdf import PdfReader
 except Exception:
-    PdfReader = None
+    try:
+        from PyPDF2 import PdfReader
+    except Exception:
+        PdfReader = None
 
 PAS_YELLOW = "#FFD400"
 PAS_BLACK = "#0A0A0A"
@@ -89,7 +92,7 @@ st.markdown(
     """
     <div class="pas-hero">
       <div class="pas-title">PAS Invoice Reconciliation</div>
-      <div class="pas-subtitle">PAS NW Ltd · Plant hire, purchases, movements, repairs and damage charges</div>
+      <div class="pas-subtitle">PAS NW Ltd · v5 structured extraction · invoice-level approval</div>
     </div>
     """,
     unsafe_allow_html=True,
@@ -206,7 +209,7 @@ def load_plant_workbook(uploaded_file) -> Tuple[pd.DataFrame, Dict[str, str]]:
 
 def extract_text_from_pdf(file_bytes: bytes) -> List[str]:
     if PdfReader is None:
-        raise RuntimeError("PyPDF2 is not available. Add PyPDF2 to requirements.txt")
+        raise RuntimeError("PDF reader is not available. Add pypdf or PyPDF2 to requirements.txt")
     reader = PdfReader(io.BytesIO(file_bytes))
     pages = []
     for page in reader.pages:
@@ -218,25 +221,57 @@ def extract_text_from_pdf(file_bytes: bytes) -> List[str]:
 
 
 def extract_invoice_number(text: str) -> str:
+    """Extract invoice number without accidentally swallowing header labels.
+
+    The PDF text order is messy on some suppliers. Boundary, for example, returns:
+    date -> invoice number -> Hire Invoice -> labels. We therefore use strict
+    candidate validation and supplier-neutral fallback patterns.
+    """
+    text = text.replace("\xa0", " ")
+
+    def valid(candidate: str) -> Optional[str]:
+        candidate = re.sub(r"[^A-Z0-9\-/]", "", str(candidate).upper())
+        if len(candidate) < 4 or len(candidate) > 24:
+            return None
+        bad_bits = ["INVOICE", "DATE", "ACCOUNT", "CUSTOMER", "PERIOD", "CHARGE", "TOTAL", "NUMBER", "CONTRACT", "ADDRESS"]
+        if any(b in candidate for b in bad_bits):
+            return None
+        if candidate in ["UNKNOWN", "HIRE", "NO", "N/A"]:
+            return None
+        return candidate
+
     patterns = [
-        r"Invoice\s*(?:No\.?|Number|#)\s*[:\-]?\s*([A-Z0-9][A-Z0-9\-/]{3,})",
-        r"INVOICE\s*NO\s*[:\-]?\s*([A-Z0-9][A-Z0-9\-/]{3,})",
-        r"Hire\s+Invoice\s+No\s*[:\-]?\s*([A-Z0-9][A-Z0-9\-/]{3,})",
-        r"#\s*([A-Z]{2,}[A-Z0-9\-/]{4,})",
+        r"Invoice\s*(?:No\.?|Number|#)\s*[:\-]?\s*([A-Z0-9][A-Z0-9\-/]{3,24})",
+        r"INVOICE\s*NO\s*[:\-]?\s*([A-Z0-9][A-Z0-9\-/]{3,24})",
+        r"Hire\s+Invoice\s+No\s*[:\-]?\s*([A-Z0-9][A-Z0-9\-/]{3,24})",
+        r"#\s*([A-Z]{2,}[A-Z0-9\-/]{4,24})",
     ]
     for p in patterns:
         m = re.search(p, text, flags=re.IGNORECASE)
         if m:
-            candidate = m.group(1).strip().strip(".")
-            if candidate.upper() not in ["INVOICE", "NUMBER", "DATE"]:
-                return candidate
-    # fallback for lone line after invoice no label
-    lines = [l.strip() for l in text.splitlines() if l.strip()]
-    for i, line in enumerate(lines[:40]):
-        if re.search(r"invoice\s*(no|number)", line, re.I) and i + 1 < len(lines):
-            cand = re.sub(r"[^A-Z0-9\-/]", "", lines[i + 1].upper())
-            if len(cand) >= 4 and not cand.startswith("DATE"):
+            cand = valid(m.group(1))
+            if cand:
                 return cand
+
+    # Boundary-style PDFs often show a standalone 5/6 digit invoice number before "Hire Invoice".
+    m = re.search(r"(?m)^\s*(\d{5,8})\s*$\s*\n\s*Hire\s+Invoice", text, flags=re.IGNORECASE)
+    if m:
+        return m.group(1)
+
+    # If labels are on separate lines, scan a few lines after an invoice label for a standalone number/code.
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    for i, line in enumerate(lines[:60]):
+        if re.search(r"invoice\s*(no|number|#)", line, re.I):
+            for nxt in lines[i + 1 : i + 8]:
+                cand = valid(nxt)
+                if cand:
+                    return cand
+
+    # Final supplier-neutral fallback: a standalone numeric invoice-like line near top of page.
+    for line in lines[:25]:
+        m = re.fullmatch(r"\d{5,8}", line)
+        if m:
+            return line
     return "Unknown"
 
 
@@ -263,14 +298,14 @@ def split_pdf_into_invoices(filename: str, pages: List[str]) -> List[Dict]:
         page_marker = re.search(r"Page\s+\d+\s*(?:/|of)\s*\d+", page_text, re.I)
 
         if current is None:
-            current = {"source_file": filename, "invoice_number": inv_no, "pages": [idx], "text": page_text}
+            current = {"source_file": filename, "invoice_number": inv_no if inv_no != "Unknown" else (re.search(r"\d{5,8}", filename).group(0) if re.search(r"\d{5,8}", filename) else "Unknown"), "pages": [idx], "text": page_text}
             continue
 
         # Start a new invoice only where a genuine new invoice number is found, not just continuation page text.
         current_inv = current.get("invoice_number", "Unknown")
         if has_invoice_header and inv_no != "Unknown" and inv_no != current_inv:
             groups.append(current)
-            current = {"source_file": filename, "invoice_number": inv_no, "pages": [idx], "text": page_text}
+            current = {"source_file": filename, "invoice_number": inv_no if inv_no != "Unknown" else (re.search(r"\d{5,8}", filename).group(0) if re.search(r"\d{5,8}", filename) else "Unknown"), "pages": [idx], "text": page_text}
         else:
             current["pages"].append(idx)
             current["text"] += "\n" + page_text
@@ -344,28 +379,57 @@ def extract_money_values(text: str) -> List[float]:
 
 
 def extract_priority_money_values(text: str) -> List[float]:
+    """Extract comparable invoice rates/values globally, but avoid header/date noise.
+
+    We deliberately do not require supplier-specific table layouts. If a full PO
+    has matched the Plant tab, any proper monetary/rate value on the invoice can
+    validate against the agreed Plant value. This fixes Boundary-style tables
+    where weekly rates/total charges appear as plain decimals without a £ sign.
+    """
     priority = []
     fallback = []
-    for line in text.splitlines():
+    for raw_line in text.splitlines():
+        line = raw_line.replace("\xa0", " ")
         low = line.lower()
+        # Ignore address/header labels that are not charge lines.
+        if any(addr in low for addr in ADDRESS_TERMS):
+            continue
+        if re.search(r"\b(vat registration|company number|account no|sort code|telephone|postcode|page\s+\d)\b", low):
+            continue
+
         line_vals = []
-        matches = re.findall(r"£\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)(?:\.([0-9]{2}))?", line)
-        if not matches and re.search(r"\b(rate|weekly|week|wk|total charge|unit price|net amount|value|amount|price)\b", low):
-            matches = re.findall(r"\b([0-9]{1,4})(?:\.([0-9]{2}))\b", line)
-        for whole, dec in matches:
+
+        # Currency values e.g. £425.00
+        for m in re.finditer(r"£\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)(?:\.([0-9]{2}))?", line):
+            whole, dec = m.group(1), m.group(2) or "00"
             try:
-                line_vals.append(float(f"{whole.replace(',', '')}.{dec or '00'}"))
+                line_vals.append(float(f"{whole.replace(',', '')}.{dec}"))
             except Exception:
                 pass
+
+        # Plain decimal money/rate values e.g. Boundary rows: 425.00, 200.00.
+        # Avoid VAT percentage values like 20.00%.
+        for m in re.finditer(r"(?<![A-Z0-9/])([0-9]{1,5}\.[0-9]{2})(?!\s*%)(?![A-Z0-9/])", line):
+            try:
+                val = float(m.group(1))
+                if 0 < val <= 100000:
+                    line_vals.append(val)
+            except Exception:
+                pass
+
         if not line_vals:
             continue
-        if any(label in low for label in ["invoice total", "vat total", "gross", "total vat", "vat @", "vat at"]):
+
+        # De-prioritise final invoice/gross/VAT totals, but keep as fallback.
+        if any(label in low for label in ["invoice total", "vat total", "gross", "total vat", "vat @", "vat at", "invoice total"]):
             fallback.extend(line_vals)
         else:
             priority.extend(line_vals)
+
     values = priority + fallback
     out = []
     for v in values:
+        v = round(float(v), 2)
         if v not in out:
             out.append(v)
     return out
