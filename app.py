@@ -331,7 +331,35 @@ def extract_order_refs(text: str) -> List[str]:
     return sorted(refs)
 
 
+def extract_account_name_supplier(text: str) -> str:
+    """
+    Some invoices, especially Boundary Plant, show the clean supplier name in the
+    payment details block as 'Account Name: Boundary Plant Hire Ltd'. Use this as
+    a high-confidence supplier source and ignore customer/branch/address labels.
+    """
+    compact = re.sub(r"\s+", " ", text).strip()
+    m = re.search(
+        r"Account\s+Name\s*:?\s*([A-Z0-9&.,'()\-/ ]{3,90}?)(?=\s+(Sort\s+Code|Account\s+No|IBAN|Bank|Payment|VAT|$))",
+        compact,
+        re.I,
+    )
+    if not m:
+        return ""
+    supplier = re.sub(r"\s+", " ", m.group(1)).strip(" :-")
+    if any(bad in supplier.lower() for bad in BAD_SUPPLIER_PATTERNS):
+        return ""
+    if len(supplier) < 4:
+        return ""
+    return supplier
+
+
 def extract_supplier_candidate(text: str) -> str:
+    # First use explicit payment block supplier if present. This catches Boundary
+    # where the top/header extraction can be unreliable but the Account Name is clean.
+    account_supplier = extract_account_name_supplier(text)
+    if account_supplier:
+        return account_supplier
+
     lines = [re.sub(r"\s+", " ", l).strip() for l in text.splitlines() if l.strip()]
     candidates = []
     for line in lines[:35]:
