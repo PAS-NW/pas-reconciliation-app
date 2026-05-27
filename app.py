@@ -1038,7 +1038,6 @@ OUTPUT_COLUMNS = [
     "Invoice Type",
     "Plant Status",
     "Agreed Rate / Value",
-    "Invoice Net Total",
     "Match Status",
     "Unmatched Reason",
 ]
