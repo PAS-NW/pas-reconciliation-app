@@ -93,7 +93,7 @@ st.markdown(
     """
     <div class="pas-hero">
       <div class="pas-title">PAS Invoice Reconciliation</div>
-      <div class="pas-subtitle">PAS NW Ltd · v10 invoice number fallback · simplified export</div>
+      <div class="pas-subtitle">PAS NW Ltd · v11 pro-rata hire day validation</div>
     </div>
     """,
     unsafe_allow_html=True,
@@ -704,24 +704,165 @@ def find_matching_plant_rows(plant_df: pd.DataFrame, refs: List[str]) -> pd.Data
     return plant_df[mask].copy()
 
 
-def values_match(plant_values: List[float], invoice_values: List[float], tolerance: float = 0.02) -> Tuple[bool, str, Optional[float]]:
+def close_money(a: float, b: float, tolerance: float = 0.02) -> bool:
+    try:
+        return abs(round(float(a), 2) - round(float(b), 2)) <= tolerance
+    except Exception:
+        return False
+
+
+def extract_rate_charge_lines(text: str) -> List[Dict[str, float]]:
+    """Extract structured rate/charge pairs from invoice text.
+
+    Handles common hire invoice wording such as:
+    - £18.60 per week for 1 week, 2 days ... £26.04
+    - £35.00 WK 0/4/2 STD £154.00
+    - Boundary-style table rows with weekly rate and total charge as plain decimals.
+    """
+    rows = []
+    flat = re.sub(r"\s+", " ", text.replace("£ ", "£")).strip()
+
+    def add(rate, charge=None, days=None, source=""):
+        try:
+            rate = round(float(str(rate).replace(",", "")), 2)
+        except Exception:
+            return
+        if rate <= 0 or rate > 100000:
+            return
+        c = None
+        if charge is not None:
+            try:
+                c = round(float(str(charge).replace(",", "")), 2)
+            except Exception:
+                c = None
+        d = None
+        if days is not None:
+            try:
+                d = float(days)
+            except Exception:
+                d = None
+        if c is None and d is not None:
+            c = round(rate / 5 * d, 2)
+        item = {"rate": rate}
+        if c is not None and c > 0:
+            item["charge"] = c
+        if d is not None:
+            item["days"] = d
+        if source:
+            item["source"] = source
+        if item not in rows:
+            rows.append(item)
+
+    for m in re.finditer(
+        r"£\s*([0-9,]+\.\d{2})\s*per\s*week\s*for\s*"
+        r"(?:(\d+)\s*week[s]?)?\s*,?\s*"
+        r"(?:(\d+)\s*day[s]?)?.{0,220}?£\s*([0-9,]+\.\d{2})",
+        flat, re.I
+    ):
+        rate = m.group(1)
+        weeks = int(m.group(2) or 0)
+        days = int(m.group(3) or 0)
+        charge = m.group(4)
+        add(rate, charge, weeks * 5 + days, "per week wording")
+
+    for m in re.finditer(
+        r"£\s*([0-9,]+\.\d{2})\s*per\s*week\s*for\s*"
+        r"(?:(\d+)\s*week[s]?)?\s*,?\s*"
+        r"(?:(\d+)\s*day[s]?)?",
+        flat, re.I
+    ):
+        rate = m.group(1)
+        weeks = int(m.group(2) or 0)
+        days = int(m.group(3) or 0)
+        if weeks or days:
+            add(rate, None, weeks * 5 + days, "calculated per week wording")
+
+    for m in re.finditer(r"£?\s*([0-9,]+\.\d{2})\s*WK\s*(\d+)\s*/\s*(\d+)\s*/\s*(\d+).{0,60}?£?\s*([0-9,]+\.\d{2})", flat, re.I):
+        rate = m.group(1)
+        months = int(m.group(2) or 0)
+        weeks = int(m.group(3) or 0)
+        days = int(m.group(4) or 0)
+        charge = m.group(5)
+        add(rate, charge, (months * 4 * 5) + (weeks * 5) + days, "M/W/D wording")
+
+    for line in text.splitlines():
+        low = line.lower()
+        if any(addr in low for addr in ADDRESS_TERMS):
+            continue
+        if re.search(r"\b(invoice total|vat total|goods total|sort code|account no|payment details)\b", low):
+            continue
+        nums = [float(x) for x in re.findall(r"(?<![A-Z0-9/])([0-9]{1,5}\.[0-9]{2})(?!\s*%)(?![A-Z0-9/])", line)]
+        if len(nums) >= 2 and re.search(r"\b(\d+\s*/\s*\d+|/\s*\d+)\b", line):
+            add(nums[-2], nums[-1], None, "table row rate/charge")
+
+    return rows
+
+
+def calculated_invoice_values(text: str) -> List[float]:
+    vals = []
+    for item in extract_rate_charge_lines(text):
+        vals.append(item.get("rate"))
+        if item.get("charge") is not None:
+            vals.append(item.get("charge"))
+    out = []
+    for v in vals:
+        if v is None:
+            continue
+        v = round(float(v), 2)
+        if v > 0 and v not in out:
+            out.append(v)
+    return out
+
+
+def values_match(plant_values: List[float], invoice_values: List[float], line_items: Optional[List[Dict[str, float]]] = None, tolerance: float = 0.02) -> Tuple[bool, str, Optional[float]]:
     plant_values = [round(v, 2) for v in plant_values if v is not None and not pd.isna(v) and v > 0]
     invoice_values = [round(v, 2) for v in invoice_values if v is not None and not pd.isna(v) and v > 0]
+    line_items = line_items or []
+    line_rates = [round(float(x.get("rate", 0)), 2) for x in line_items if x.get("rate") is not None and x.get("rate", 0) > 0]
+    line_charges = [round(float(x.get("charge", 0)), 2) for x in line_items if x.get("charge") is not None and x.get("charge", 0) > 0]
+
     if not plant_values:
         return False, "No agreed rate/value found on Plant tab", None
-    if not invoice_values:
+    if not invoice_values and not line_rates and not line_charges:
         return False, "No comparable rate/value found on invoice", None
+
     for pv in plant_values:
-        for iv in invoice_values:
-            if abs(pv - iv) <= tolerance:
+        for iv in invoice_values + line_rates + line_charges:
+            if close_money(pv, iv, tolerance):
                 return True, "Rate/value matched", 0.0
-            # allow tiny rounding variance for pro-rata/line totals only when extremely close.
             if pv and abs(pv - iv) / pv <= 0.005:
                 return True, "Rate/value matched within rounding tolerance", round(iv - pv, 2)
-    # report nearest variance.
-    nearest = min((iv - pv for pv in plant_values for iv in invoice_values), key=lambda x: abs(x))
-    return False, f"Price discrepancy: nearest variance £{nearest:.2f}", nearest
 
+    plant_sum = round(sum(plant_values), 2)
+    rate_sum = round(sum(line_rates), 2) if line_rates else None
+    charge_sum = round(sum(line_charges), 2) if line_charges else None
+    invoice_sum = round(sum(invoice_values), 2) if invoice_values else None
+
+    comparable_sums = [x for x in [rate_sum, charge_sum, invoice_sum] if x is not None and x > 0]
+    for comp in comparable_sums:
+        if close_money(plant_sum, comp, tolerance):
+            return True, "Combined invoice lines matched Plant value", 0.0
+        for pv in plant_values:
+            if close_money(pv, comp, tolerance):
+                return True, "Combined invoice lines matched agreed value", 0.0
+
+    for item in line_items:
+        rate = item.get("rate")
+        charge = item.get("charge")
+        days = item.get("days")
+        if rate is None or charge is None:
+            continue
+        for pv in plant_values:
+            if close_money(pv, rate, tolerance):
+                expected = round(float(rate) / 5 * float(days), 2) if days is not None else None
+                if expected is None or close_money(expected, charge, 0.03):
+                    return True, "Weekly rate matched and pro-rata hire charge validated", 0.0
+
+    nearest_candidates = invoice_values + line_rates + line_charges + comparable_sums
+    if nearest_candidates:
+        nearest = min((iv - pv for pv in plant_values for iv in nearest_candidates), key=lambda x: abs(x))
+        return False, f"Price discrepancy: nearest variance £{nearest:.2f}", nearest
+    return False, "No comparable rate/value found on invoice", None
 
 def reconcile_invoice(inv: Dict, plant_df: pd.DataFrame) -> Dict:
     text = inv["text"]
@@ -749,7 +890,11 @@ def reconcile_invoice(inv: Dict, plant_df: pd.DataFrame) -> Dict:
 
     supplier = plant_supplier or raw_supplier
     invoice_type = classify_invoice(text, plant_status)
+    line_items = extract_rate_charge_lines(text)
     invoice_values = extract_priority_money_values(text)
+    for v in calculated_invoice_values(text):
+        if v not in invoice_values:
+            invoice_values.append(v)
     net_total = None
     # Find net total/goods value for display.
     for p in [r"Goods\s+Total\s*£?\s*([0-9,]+\.\d{2})", r"NET\s*£\s*([0-9,]+\.\d{2})", r"Sub-Total\s*£?\s*([0-9,]+\.\d{2})", r"Net\s+value\s*\n?\s*([0-9,]+\.\d{2})"]:
@@ -769,7 +914,7 @@ def reconcile_invoice(inv: Dict, plant_df: pd.DataFrame) -> Dict:
     elif matched_rows.empty:
         reason = "Order reference not found on Plant tab"
     else:
-        matched, reason, variance = values_match(plant_rate_values, invoice_values)
+        matched, reason, variance = values_match(plant_rate_values, invoice_values, line_items)
 
     status = "Matched" if matched else "Unmatched"
     return {
@@ -784,6 +929,7 @@ def reconcile_invoice(inv: Dict, plant_df: pd.DataFrame) -> Dict:
         "Plant Status": plant_status,
         "Agreed Rate / Value": ", ".join(f"£{v:.2f}" for v in sorted(set(plant_rate_values))) if plant_rate_values else "",
         "Invoice Values Found": ", ".join(f"£{v:.2f}" for v in invoice_values[:12]),
+        "Pro-Rata Lines Found": ", ".join([f"£{x.get('rate', 0):.2f} -> £{x.get('charge', 0):.2f}" for x in line_items[:8] if x.get('charge') is not None]),
         "Invoice Net Total": f"£{net_total:.2f}" if net_total is not None else "",
         "Matched Plant Row(s)": ", ".join(plant_rows),
         "Match Status": status,
@@ -876,6 +1022,7 @@ def make_excel(summary_df, matched_df, unmatched_df, all_df) -> bytes:
             "Supplier is taken from the Plant row once a full order reference matches.",
             "Movement is only detected from actual charge lines with values, not from Delivery Address/Site Address labels.",
             "Global value extraction checks line rate, weekly rate, daily rate, unit price, line value, total charge and net totals.",
+            "Weekly hire charges are validated using pro-rata week/day calculations where the invoice shows them.",
             "Job-code phases are normalised for matching: P153G1/P153G2 become P153, and P151M&N/P151MN become P151.",
             "Raw Text Preview is excluded from the operational output.",
             "Excel exports use filters, frozen headers and auto-sized columns.",
