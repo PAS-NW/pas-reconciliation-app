@@ -92,7 +92,7 @@ st.markdown(
     """
     <div class="pas-hero">
       <div class="pas-title">PAS Invoice Reconciliation</div>
-      <div class="pas-subtitle">PAS NW Ltd · v5 structured extraction · invoice-level approval</div>
+      <div class="pas-subtitle">PAS NW Ltd · v9 invoice number/date stability · invoice-level approval</div>
     </div>
     """,
     unsafe_allow_html=True,
@@ -321,9 +321,49 @@ def bad_invoice_number(candidate: str) -> bool:
     bad_bits = [
         "INVOICE", "DATE", "ACCOUNT", "CUSTOMER", "PERIOD", "CHARGE", "TOTAL",
         "NUMBER", "CONTRACT", "ADDRESS", "POCKET", "NOOK", "LANE", "ROAD",
-        "STREET", "AVENUE", "WARRINGTON", "LOWTON", "PAS", "SLDBOLTON"
+        "STREET", "AVENUE", "WARRINGTON", "LOWTON", "PAS", "SLDBOLTON",
+        "WA31AB", "ORDER", "GREATER", "AINSCOUGH", "HAULAGE", "CHEMI",
+        "ACCOUNTNO", "INVOICEDATE", "ACCOUNTNOP105"
     ]
     return any(bit in candidate for bit in bad_bits)
+
+def invoice_number_from_filename(filename: str) -> str:
+    """Use the PDF filename as a safe fallback for single-invoice files.
+
+    This prevents header/address text such as WA31AB, ORDER or GREATER being
+    accepted as an invoice number. Multi-invoice PDFs like Smiths X 6 do not
+    contain one clear invoice token in the filename, so they remain driven by
+    page text.
+    """
+    base = Path(filename).stem.upper()
+    base = re.sub(r"[_]+", " ", base)
+    patterns = [
+        r"\b(I\d{3}I\d{5,})\b",   # GSF e.g. I261I022140
+        r"\b(WIN\d{4,8})\b",       # Ashley
+        r"\b(INV\d{4,9})\b",       # Fox etc
+        r"\b(\d{6,8})\b",          # Boundary/Kensite/RSS/SLD/SMT/Tyrefix
+        r"\b(\d{5}Q)\b",           # invoice refs with Q suffix if ever required
+    ]
+    for pat in patterns:
+        m = re.search(pat, base)
+        if m:
+            return m.group(1).replace("Q", "") if re.fullmatch(r"\d{5}Q", m.group(1)) else m.group(1)
+    return ""
+
+
+def choose_invoice_number(filename: str, extracted: str) -> str:
+    file_no = invoice_number_from_filename(filename)
+    extracted = clean_cell(extracted) or "Unknown"
+    # Filename wins when the extracted value is obviously a label/address/depot text.
+    if file_no and bad_invoice_number(extracted):
+        return file_no
+    # Filename also wins for standard single-invoice files where extraction glued text onto the number.
+    if file_no and extracted.upper().startswith(file_no) and extracted.upper() != file_no:
+        return file_no
+    # If the PDF extraction is unknown but filename has a strong invoice token, use it.
+    if file_no and extracted.upper() == "UNKNOWN":
+        return file_no
+    return extracted
 
 
 def extract_invoice_date(text: str) -> str:
@@ -337,6 +377,23 @@ def extract_invoice_date(text: str) -> str:
         return clean_cell(raw).replace("  ", " ")
 
     date_token = r"(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{1,2}[-\s]?[A-Za-z]{3,9}[-\s]?\d{2,4})"
+
+    compact = re.sub(r"\s+", " ", text.replace("\xa0", " ")).strip()
+    compact_patterns = [
+        rf"Date\s+of\s+Invoice\s*[:\-]?\s*{date_token}",
+        rf"Invoice\s+Date\s*[:\-]?\s*{date_token}",
+        rf"Document\s+Date\s*[:\-]?\s*{date_token}",
+        rf"Date\s*[:\-]\s*{date_token}",
+    ]
+    for pat in compact_patterns:
+        m = re.search(pat, compact, re.I)
+        if m:
+            return norm_date(m.group(1))
+
+    # Boundary text often extracts as: '24 May 2026 176607 Hire Invoice'.
+    m = re.search(rf"{date_token}\s+\d{{5,8}}\s+Hire\s+Invoice", compact, re.I)
+    if m:
+        return norm_date(m.group(1))
 
     strong_patterns = [
         rf"Date\s+of\s+Invoice\s*[:\-]?\s*{date_token}",
@@ -373,22 +430,20 @@ def split_pdf_into_invoices(filename: str, pages: List[str]) -> List[Dict]:
     groups = []
     current = None
     for idx, page_text in enumerate(pages, start=1):
-        inv_no = extract_invoice_number(page_text)
-        filename_inv_match = re.search(r"(\d{5,8})", filename)
-        if filename_inv_match and bad_invoice_number(inv_no):
-            inv_no = filename_inv_match.group(1)
+        raw_inv_no = extract_invoice_number(page_text)
+        inv_no = choose_invoice_number(filename, raw_inv_no)
         has_invoice_header = bool(re.search(r"invoice\s*(no\.?|number|#)", page_text, re.I))
         page_marker = re.search(r"Page\s+\d+\s*(?:/|of)\s*\d+", page_text, re.I)
 
         if current is None:
-            current = {"source_file": filename, "invoice_number": inv_no if inv_no != "Unknown" else (re.search(r"\d{5,8}", filename).group(0) if re.search(r"\d{5,8}", filename) else "Unknown"), "pages": [idx], "text": page_text}
+            current = {"source_file": filename, "invoice_number": inv_no, "pages": [idx], "text": page_text}
             continue
 
         # Start a new invoice only where a genuine new invoice number is found, not just continuation page text.
         current_inv = current.get("invoice_number", "Unknown")
         if has_invoice_header and inv_no != "Unknown" and inv_no != current_inv:
             groups.append(current)
-            current = {"source_file": filename, "invoice_number": inv_no if inv_no != "Unknown" else (re.search(r"\d{5,8}", filename).group(0) if re.search(r"\d{5,8}", filename) else "Unknown"), "pages": [idx], "text": page_text}
+            current = {"source_file": filename, "invoice_number": inv_no, "pages": [idx], "text": page_text}
         else:
             current["pages"].append(idx)
             current["text"] += "\n" + page_text
