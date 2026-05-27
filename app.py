@@ -313,8 +313,26 @@ def extract_supplier(text: str) -> str:
 
     if candidates:
         candidates.sort(key=lambda x: x[0], reverse=True)
-        return candidates[0][1]
+        best = candidates[0][1]
+        return "Unknown supplier" if is_weak_supplier_name(best) else best
     return "Unknown supplier"
+
+
+def is_weak_supplier_name(name: str) -> bool:
+    s = safe_text(name).strip()
+    u = s.upper()
+    if not s or u in {"UNKNOWN SUPPLIER", "UNKNOWN", "INVOICE", "PAGE 2 / 2", "HIRE PERIOD TOTAL CHARGE"}:
+        return True
+    weak_phrases = [
+        "VAT NUMBER", "WEBSITE:", "HTTP", "WWW.", "ALL COMPANIES ARE TRADING DIVISIONS",
+        "HIRE PERIOD TOTAL CHARGE", "CUSTOMER REF", "DELIVERY ADDRESS", "INVOICE ADDRESS",
+        "ACCOUNT NO", "SORT CODE", "PAYMENT DETAILS", "PAGE ",
+    ]
+    if any(x in u for x in weak_phrases):
+        return True
+    if re.match(r"^\d+\s*[-–]\s*[A-Z ]+$", s, re.I):
+        return True
+    return False
 
 
 def extract_invoice_no(text: str) -> str:
@@ -505,7 +523,12 @@ def reconcile_record(rec: Dict[str, Any], plant: pd.DataFrame, colmap: Dict[str,
 
         # Supplier fuzzy check: useful but not enough to fail where invoice header is weak.
         plant_supplier = safe_text(matched_row.get(colmap.get("supplier"), "")) if colmap.get("supplier") else ""
-        if plant_supplier and supplier != "Unknown supplier":
+        # If the PDF header extraction has captured a website, branch, VAT line, table heading, etc.,
+        # use the Plant-tab supplier once the order reference has matched. This avoids false supplier names
+        # like "Hire Period Total Charge" while still keeping the invoice-level match strict on value/rate.
+        if plant_supplier and is_weak_supplier_name(supplier):
+            supplier = plant_supplier
+        elif plant_supplier and supplier != "Unknown supplier":
             s1, s2 = norm(plant_supplier), norm(supplier)
             ratio = fuzz.partial_ratio(s1, s2) if fuzz else (100 if s1 in s2 or s2 in s1 else 0)
             if ratio < 60:
@@ -580,8 +603,8 @@ def make_excel(summary: pd.DataFrame, matched: pd.DataFrame, unmatched: pd.DataF
                 cell.border = border
                 cell.alignment = Alignment(vertical="top", wrap_text=True)
                 if r_idx == 1:
-                    cell.fill = header_fill if name != "Unmatched" else black_fill
-                    cell.font = black_font if name != "Unmatched" else white_font
+                    cell.fill = header_fill
+                    cell.font = black_font
         ws.freeze_panes = "A2"
         if df.shape[1] > 0:
             ws.auto_filter.ref = ws.dimensions
@@ -602,7 +625,7 @@ with st.sidebar:
     st.markdown("### Rules")
     for rule in RULES[:10]:
         st.markdown(f"✓ {rule}")
-    st.markdown("<br><span class='small-note'>PAS Invoice Reconciliation<br>v3.0 extraction upgrade</span>", unsafe_allow_html=True)
+    st.markdown("<br><span class='small-note'>PAS Invoice Reconciliation<br>v3.1 supplier/export fixes</span>", unsafe_allow_html=True)
 
 logo_html = ""
 if LOGO_PATH.exists():
