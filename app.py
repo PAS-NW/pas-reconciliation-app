@@ -3,10 +3,14 @@ import re
 import zipfile
 from datetime import datetime
 from pathlib import Path
+from typing import Dict, List, Tuple, Any, Optional
 
 import pandas as pd
 import streamlit as st
 from pypdf import PdfReader
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 
 try:
     from rapidfuzz import fuzz
@@ -15,47 +19,9 @@ except Exception:
 
 APP_TITLE = "PAS Invoice Reconciliation"
 LOGO_PATH = Path(__file__).with_name("pas_logo.png")
-
-st.set_page_config(page_title=APP_TITLE, layout="wide")
-
-st.markdown(
-    """
-    <style>
-    .stApp { background: #f7f7f4; color: #0A0A0A; }
-    [data-testid="stHeader"] { background: #0A0A0A; }
-    [data-testid="stSidebar"] { background: linear-gradient(180deg, #24242c 0%, #171820 100%); }
-    [data-testid="stSidebar"] * { color: #ffffff !important; }
-    .block-container { padding-top: 3rem; max-width: 1280px; }
-    h1, h2, h3, label { color: #0A0A0A !important; }
-    .pas-header-title { color:#0A0A0A !important; font-size:42px; font-weight:900; line-height:1.05; margin:0; letter-spacing:-1px; }
-    .pas-header-subtitle { color:#555555 !important; margin-top:10px; font-size:18px; }
-    .stButton > button[kind="primary"] { background:#FFD400 !important; color:#0A0A0A !important; border:0 !important; font-weight:800 !important; border-radius:10px !important; }
-    .stButton > button[kind="primary"]:hover { background:#e9c200 !important; color:#0A0A0A !important; }
-    [data-testid="stFileUploaderDropzone"] { background:#171820 !important; border: 1px solid #30313a !important; border-radius: 12px !important; }
-    [data-testid="stFileUploaderDropzone"] * { color: #ffffff !important; }
-    .stAlert { border-radius: 12px !important; }
-    div[data-testid="metric-container"] { background:transparent; border:0; padding:0; box-shadow:none; }
-    div[data-testid="metric-container"] label, div[data-testid="metric-container"] [data-testid="stMetricLabel"] { color:#0A0A0A !important; font-weight:700 !important; }
-    div[data-testid="stMetricValue"] { color:#FFD400 !important; font-weight:900 !important; }
-    div[data-testid="stDownloadButton"] button { background:#FFD400 !important; color:#0A0A0A !important; border:0 !important; font-weight:800 !important; border-radius:10px !important; }
-    div[data-testid="stDownloadButton"] button:hover { background:#e9c200 !important; color:#0A0A0A !important; }
-    .stTabs [data-baseweb="tab"] { color:#666 !important; }
-    .stTabs [aria-selected="true"] { color:#0A0A0A !important; font-weight:800 !important; border-bottom-color:#FFD400 !important; }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
-header_left, header_right = st.columns([0.08, 0.92])
-with st.container():
-    cols = st.columns([0.09, 0.91])
-    with cols[0]:
-        if LOGO_PATH.exists():
-            st.image(str(LOGO_PATH), width=82)
-    with cols[1]:
-        st.markdown(f"<div style='padding-top:5px'><div class='pas-header-title'>{APP_TITLE}</div><div class='pas-header-subtitle'>Plant hire invoice matching against the Plant tab.</div></div>", unsafe_allow_html=True)
-
-st.divider()
+PAS_YELLOW = "#FFD400"
+PAS_BLACK = "#0B0B0B"
+PAS_DARK = "#181922"
 
 RULES = [
     "Use Plant tab only",
@@ -68,41 +34,125 @@ RULES = [
     "Every unmatched invoice must include a clear reason",
     "Multiple invoices inside one PDF are assessed separately",
     "Summary must always show match percentage",
+    "PDF recognition v3: multi-page invoices stay together unless a genuine new invoice starts",
+    "Supplier detection ignores VAT numbers, branches, depots and page continuation text",
 ]
 
-SUPPLIER_HINTS = {
-    "Rope & Sling Specialists Ltd": ["rope & sling", "rssgroup"],
-    "Kensite Services Ltd": ["kensite"],
-    "SMT GB": ["smt gb", "services machinery"],
-    "Fox Brothers (Leyland) Ltd": ["fox brothers", "fox group"],
-    "Smiths Equipment Hire Ltd": ["smiths equipment", "smiths hire"],
-    "Ashley Plant Hire and Reclamation Ltd": ["ashley plant"],
-    "Boundary Plant Hire Ltd": ["boundary plant"],
-    "SLD Pumps & Power": ["sld pumps", "carrier rental"],
+DISPLAY_COLUMNS = {
+    "Source File": "PDF File",
+    "Invoice No": "Invoice Number",
+    "Supplier": "Supplier",
+    "Invoice Date": "Invoice Date",
+    "PO / Ref": "Order Reference",
+    "PO Quality": "Reference Quality",
+    "Type": "Invoice Type",
+    "Weekly Rates Found": "Agreed Rate / Value",
+    "Net Total": "Invoice Net Total",
+    "Result": "Match Status",
+    "Reason": "Unmatched Reason",
+    "Matched Plant Row": "Matched Plant Row",
 }
 
-FULL_PO_RE = re.compile(r"P\d{3}(?:M&N|MN|M\s*&\s*N)?/H\d+", re.IGNORECASE)
-WEAK_PO_RE = re.compile(r"\bP\d{3}(?:M&N|MN|M\s*&\s*N)?\b", re.IGNORECASE)
-MONEY_RE = re.compile(r"£\s*([0-9,]+\.\d{2})")
+DROP_EXPORT_COLUMNS = {"Raw Text Preview", "Raw Text", "Text", "raw_text"}
 
+st.set_page_config(page_title=APP_TITLE, layout="wide")
 
-def norm(s):
-    return re.sub(r"[^a-z0-9]+", "", str(s).lower()) if s is not None else ""
+st.markdown(
+    f"""
+<style>
+.stApp {{ background: #f7f7f4; color: {PAS_BLACK}; }}
+[data-testid="stHeader"] {{ background: {PAS_BLACK}; }}
+[data-testid="stSidebar"] {{ background: linear-gradient(180deg, #24242c 0%, #171820 100%); }}
+[data-testid="stSidebar"] * {{ color: #f6f6f6 !important; }}
+.block-container {{ padding-top: 2.5rem; max-width: 1250px; }}
+h1, h2, h3, label, p {{ color: {PAS_BLACK} !important; }}
+.pas-title {{ display:flex; align-items:center; gap:18px; margin-bottom: 45px; }}
+.pas-title img {{ width:76px; height:76px; border-radius:10px; object-fit:cover; }}
+.pas-title h1 {{ font-size:42px; line-height:1; font-weight:900; margin:0; letter-spacing:-1px; }}
+.pas-title p {{ margin:8px 0 0 0; color:#444 !important; font-size:16px; }}
+.metric-row {{ display:grid; grid-template-columns:repeat(4,1fr); gap:70px; margin:24px 0 28px 0; }}
+.metric-label {{ font-size:14px; color:#0b0b0b; font-weight:700; margin-bottom:5px; }}
+.metric-value {{ font-size:34px; color:{PAS_YELLOW}; font-weight:900; line-height:1; text-shadow: 0 1px 0 rgba(0,0,0,.12); }}
+.stButton > button {{ background:{PAS_YELLOW} !important; color:{PAS_BLACK} !important; border:0 !important; border-radius:10px !important; font-weight:800 !important; }}
+.stDownloadButton > button {{ background:{PAS_YELLOW} !important; color:{PAS_BLACK} !important; border:0 !important; border-radius:10px !important; font-weight:800 !important; }}
+[data-testid="stFileUploader"] section {{ background:#171820 !important; border: 1px solid #30313a !important; border-radius: 12px !important; }}
+[data-testid="stFileUploader"] section * {{ color:#fff !important; }}
+.stTabs [data-baseweb="tab-list"] {{ gap: 20px; }}
+.stTabs [data-baseweb="tab"] {{ color:#333; font-weight:800; }}
+.stTabs [aria-selected="true"] {{ color:#000 !important; border-bottom:3px solid {PAS_YELLOW} !important; }}
+[data-testid="stDataFrame"] {{ border-radius:12px; overflow:hidden; }}
+.small-note {{ color:#555 !important; font-size:13px; }}
+</style>
+""",
+    unsafe_allow_html=True,
+)
 
+# ---------- Helpers ----------
 
-def clean_po(po):
-    if po is None or pd.isna(po):
+def safe_text(value: Any) -> str:
+    if value is None:
         return ""
-    po = str(po).upper().replace(" ", "")
-    po = po.replace("P151M&N", "P151MN")
-    po = po.replace("P151M/N", "P151MN")
-    po = po.replace("P151M&AMP;N", "P151MN")
-    if po.endswith(".0"):
-        po = po[:-2]
-    return po
+    if isinstance(value, float) and pd.isna(value):
+        return ""
+    return str(value).strip()
 
 
-def extract_text_from_pdf_bytes(data: bytes):
+def norm(value: Any) -> str:
+    return re.sub(r"[^A-Z0-9]", "", safe_text(value).upper())
+
+
+def money_to_float(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)) and not pd.isna(value):
+        return float(value)
+    s = safe_text(value)
+    if not s:
+        return None
+    s = s.replace(",", "").replace("£", "")
+    m = re.search(r"-?\d+(?:\.\d{1,2})?", s)
+    return float(m.group(0)) if m else None
+
+
+def find_col(cols: List[str], candidates: List[str]) -> Optional[str]:
+    lookup = {norm(c): c for c in cols}
+    for cand in candidates:
+        nc = norm(cand)
+        if nc in lookup:
+            return lookup[nc]
+    for c in cols:
+        nc = norm(c)
+        for cand in candidates:
+            if norm(cand) in nc:
+                return c
+    return None
+
+
+def load_plant(uploaded_file) -> Tuple[pd.DataFrame, Dict[str, Optional[str]]]:
+    xls = pd.ExcelFile(uploaded_file)
+    sheet = "Plant" if "Plant" in xls.sheet_names else xls.sheet_names[0]
+    df = pd.read_excel(uploaded_file, sheet_name=sheet)
+    df = df.dropna(how="all").copy()
+    df.columns = [safe_text(c) for c in df.columns]
+    df["_Plant Row"] = df.index + 2
+    cols = list(df.columns)
+    colmap = {
+        "supplier": find_col(cols, ["Supplier", "Vendor", "Company"]),
+        "description": find_col(cols, ["Description", "Item", "Product"]),
+        "fleet": find_col(cols, ["Fleet No.", "Fleet No", "Fleet", "Asset", "Item No", "Serial"]),
+        "cost": find_col(cols, ["Cost", "Rate", "Weekly Rate", "Price", "Value"]),
+        "delivery": find_col(cols, ["Delivery", "Haulage", "Transport", "Movement"]),
+        "status": find_col(cols, ["Status", "Order Status", "Type"]),
+        "job": find_col(cols, ["Job No", "Job", "Project"]),
+        "order": find_col(cols, ["Order Number", "Order No", "PO", "PO Number", "Hire No", "H Number"]),
+        "on_hire": find_col(cols, ["On Hire / Delivery Date", "On Hire", "Delivery Date"]),
+        "off_hire": find_col(cols, ["Off Hire Date", "Off-Hire Date", "Offhire"]),
+        "expected_off": find_col(cols, ["Expected Off Hire Date", "Expected Off-Hire"]),
+    }
+    return df, colmap
+
+
+def extract_pages_from_pdf_bytes(data: bytes) -> List[str]:
     reader = PdfReader(io.BytesIO(data))
     pages = []
     for page in reader.pages:
@@ -113,396 +163,533 @@ def extract_text_from_pdf_bytes(data: bytes):
     return pages
 
 
-def split_invoice_pages(pages):
-    # First working version: assess each page that contains an invoice number as a record.
-    # This correctly handles supplier PDFs where each page is a separate invoice.
+def extract_files(invoice_uploads) -> List[Tuple[str, bytes]]:
+    files = []
+    if not invoice_uploads:
+        return files
+    for up in invoice_uploads:
+        name = up.name
+        data = up.read()
+        if name.lower().endswith(".zip"):
+            with zipfile.ZipFile(io.BytesIO(data)) as z:
+                for info in z.infolist():
+                    if info.filename.lower().endswith(".pdf") and not info.is_dir():
+                        files.append((Path(info.filename).name, z.read(info)))
+        elif name.lower().endswith(".pdf"):
+            files.append((name, data))
+    return files
+
+# ---------- PDF Recognition v3 ----------
+
+def page_invoice_numbers(text: str) -> List[str]:
+    patterns = [
+        r"\bInvoice\s*(?:No\.?|Number|#)\s*[:#]?\s*([A-Z0-9\-/]+)",
+        r"\bINVOICE\s*NO\s*[:#]?\s*([A-Z0-9\-/]+)",
+        r"\bInvoice\s+number\s+([A-Z0-9\-/]+)",
+        r"\bHire\s+Invoice\s+No\s*[:#]?\s*([A-Z0-9\-/]+)",
+    ]
+    out = []
+    for pat in patterns:
+        for m in re.finditer(pat, text, re.I):
+            val = m.group(1).strip().strip(":")
+            if val and not re.match(r"^(DATE|NO|NUMBER|PAGE)$", val, re.I):
+                out.append(val)
+    # Handle Fox #INV259319 style
+    for m in re.finditer(r"#\s*(INV\d+)", text, re.I):
+        out.append(m.group(1).upper())
+    # de-duplicate preserving order
+    dedup = []
+    for x in out:
+        if x not in dedup:
+            dedup.append(x)
+    return dedup
+
+
+def is_continuation_page(text: str, previous_invoice_no: str = "") -> bool:
+    t = text[:1200]
+    # Continuation page markers
+    if re.search(r"\bPage\s+\d+\s*/\s*\d+\b", t, re.I) and previous_invoice_no:
+        nums = page_invoice_numbers(t)
+        # Same invoice number on page 2 is continuation; no invoice number is also continuation
+        if not nums or previous_invoice_no in nums:
+            return True
+    if re.search(r"\bcontinued\b|\bcontinuation\b", t, re.I):
+        return True
+    return False
+
+
+def split_pdf_into_invoice_records(filename: str, pages: List[str]) -> List[Dict[str, Any]]:
+    """Group pages into invoice records. Multi-page single invoices stay together. True multi-invoice PDFs split."""
     records = []
-    buffer = []
-    for page_text in pages:
-        if re.search(r"invoice\s*(no|number|#)[:\s]", page_text, re.I) and buffer:
-            records.append("\n".join(buffer))
-            buffer = [page_text]
+    current_pages: List[str] = []
+    current_inv = ""
+
+    for idx, page in enumerate(pages, start=1):
+        nums = page_invoice_numbers(page[:2000])
+        page_inv = nums[0] if nums else ""
+        new_invoice = False
+
+        if not current_pages:
+            new_invoice = True
         else:
-            buffer.append(page_text)
-    if buffer:
-        records.append("\n".join(buffer))
+            if page_inv and current_inv and norm(page_inv) != norm(current_inv):
+                new_invoice = True
+            elif page_inv and not current_inv and not is_continuation_page(page, current_inv):
+                # If a new page has an invoice number and prior page did not, split only if it looks like a full invoice header
+                header_score = bool(re.search(r"invoice\s*(date|no|number)|customer\s*(ref|order)|order\s*no", page[:1800], re.I))
+                new_invoice = header_score
+            else:
+                new_invoice = False
+
+        if new_invoice and current_pages:
+            records.append({
+                "source_file": filename if len(records) == 0 else f"{filename} / record {len(records)+1}",
+                "text": "\n".join(current_pages),
+            })
+            current_pages = []
+            current_inv = ""
+
+        current_pages.append(page)
+        if page_inv and not current_inv:
+            current_inv = page_inv
+
+    if current_pages:
+        records.append({
+            "source_file": filename if len(records) == 0 else f"{filename} / record {len(records)+1}",
+            "text": "\n".join(current_pages),
+        })
     return records
 
 
-def detect_supplier(text):
-    low = text.lower()
-    for supplier, hints in SUPPLIER_HINTS.items():
-        if any(h in low for h in hints):
-            return supplier
-    # Fallback: top-left/header style first meaningful line
-    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
-    for ln in lines[:10]:
-        if not re.search(r"invoice|pas \(?nw\)?|pocket nook|date|account", ln, re.I):
-            return ln[:80]
-    return "Unknown"
+def extract_supplier(text: str) -> str:
+    top = "\n".join([ln.strip() for ln in text.splitlines()[:35] if ln.strip()])
+    lines = [ln.strip() for ln in top.splitlines() if ln.strip()]
+
+    # Known-name detection is not supplier-specific matching logic; it prevents branch/VAT/address labels becoming supplier.
+    known = [
+        "SMT GB", "GSF Car Parts", "GSF CARPARTS", "Boundary Plant Hire", "Ashley Plant Hire",
+        "Rope & Sling Specialists", "SLD Pumps", "SLD Pumps & Power", "Kensite", "Smiths Equipment Hire",
+        "Smiths Hire", "Fox Brothers", "Fox Group", "RSS", "Rope & Sling",
+    ]
+    upper = top.upper()
+    for k in known:
+        if k.upper() in upper:
+            if k.upper() == "GSF CARPARTS":
+                return "GSF Car Parts"
+            if k.upper() == "RSS":
+                return "Rope & Sling Specialists Ltd"
+            if k.upper() == "ROPE & SLING":
+                return "Rope & Sling Specialists Ltd"
+            if k.upper() == "FOX GROUP":
+                return "Fox Brothers (Leyland) Ltd"
+            return k
+
+    bad_tokens = [
+        "VAT", "INVOICE", "ACCOUNT", "CUSTOMER", "ORDER", "PAGE", "DATE", "PAS ", "PAS(",
+        "POCKET NOOK", "LOWTON", "WARRINGTON", "UNITED KINGDOM", "GREAT BRITAIN", "TEL", "EMAIL",
+        "BRANCH", "DEPOT", "SORT CODE", "ACCOUNT NO", "REGISTRATION", "REGISTERED", "DELIVERY",
+    ]
+    address_like = re.compile(r"\b(ROAD|LANE|STREET|HOUSE|PARK|INDUSTRIAL|UNIT|ESTATE|WA\d|WN\d|PR\d|M\d|L\d)\b", re.I)
+    branch_like = re.compile(r"^\d+\s*[-–]\s*[A-Z ]+$", re.I)
+
+    candidates = []
+    for ln in lines[:20]:
+        u = ln.upper()
+        if any(tok in u for tok in bad_tokens):
+            continue
+        if branch_like.search(ln):
+            continue
+        if address_like.search(ln) and not re.search(r"\b(LTD|LIMITED|HIRE|PLANT|GROUP|PARTS|CAR)\b", ln, re.I):
+            continue
+        if len(ln) < 3 or len(ln) > 80:
+            continue
+        # Prefer company-ish lines
+        score = 0
+        if re.search(r"\b(LTD|LIMITED|PLC|GROUP|HIRE|PLANT|PARTS|CAR|SERVICES|SPECIALISTS)\b", ln, re.I):
+            score += 5
+        if not re.search(r"\d", ln):
+            score += 1
+        candidates.append((score, ln))
+
+    if candidates:
+        candidates.sort(key=lambda x: x[0], reverse=True)
+        return candidates[0][1]
+    return "Unknown supplier"
 
 
-def detect_invoice_no(text):
+def extract_invoice_no(text: str) -> str:
+    nums = page_invoice_numbers(text[:2500])
+    if nums:
+        return nums[0]
+    # Fallback for filenames/content with WINxxxxx or numeric document IDs
+    m = re.search(r"\b(WIN\d{4,}|INV\d{4,}|I\d{3,}I\d{4,}|\d{6,})\b", text[:2500], re.I)
+    return m.group(1).upper() if m else "Not found"
+
+
+def extract_invoice_date(text: str) -> str:
     patterns = [
-        r"Invoice\s*(?:No|No\.|Number|#)[:\s#]*([A-Z0-9\-]+)",
-        r"INVOICE\s*NO[:\s]*([A-Z0-9\-]+)",
-        r"Hire Invoice No\s*([A-Z0-9\-]+)",
-        r"#(INV\d+)",
+        r"Invoice\s+date\s*[:]?\s*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{1,2}\s+[A-Z][a-z]+\s+\d{4})",
+        r"Date\s+of\s+Invoice\s*[:]?\s*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{1,2}\s+[A-Z][a-z]+\s+\d{4})",
+        r"Date\s*[:]?\s*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{1,2}\s+[A-Z][a-z]+\s+\d{4})",
     ]
     for pat in patterns:
-        m = re.search(pat, text, re.I)
-        if m:
-            return m.group(1).strip()
-    return "Unknown"
-
-
-def detect_date(text):
-    patterns = [
-        r"Invoice Date[:\s]*([0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{2,4})",
-        r"Date of Invoice[:\s]*([0-9]{1,2}-[A-Za-z]{3}-[0-9]{2,4})",
-        r"\b([0-9]{1,2}/[0-9]{1,2}/[0-9]{4})\b",
-        r"\b([0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4})\b",
-    ]
-    for pat in patterns:
-        m = re.search(pat, text, re.I)
+        m = re.search(pat, text[:3000], re.I)
         if m:
             return m.group(1)
     return ""
 
 
-def detect_po(text):
-    m = FULL_PO_RE.search(text)
-    if m:
-        return clean_po(m.group(0)), "Full"
-    m = WEAK_PO_RE.search(text)
-    if m:
-        return clean_po(m.group(0)), "Weak"
-    return "", "Missing"
+def extract_order_refs(text: str) -> List[str]:
+    refs = []
+    patterns = [
+        r"\b(P\d{2,4}\s*[A-Z&]*\s*/\s*H\d{3,5})\b",
+        r"\b(P\d{2,4}\s*/\s*H\d{3,5})\b",
+        r"Customer\s+Ref\.?\s*[:]?\s*(P\d{2,4}\s*[A-Z&]*\s*/\s*H\d{3,5}|P\d{2,4})",
+        r"Your\s+ref\.?\s*[:]?\s*(P\d{2,4}\s*[A-Z&]*\s*/\s*H\d{3,5}|P\d{2,4})",
+        r"Order\s+No\.?\s*[:]?\s*(P\d{2,4}\s*[A-Z&]*\s*/\s*H\d{3,5}|P\d{2,4})",
+        r"PO\s*#?\s*[:]?\s*(P\d{2,4}\s*[A-Z&]*\s*/\s*H\d{3,5}|P\d{2,4})",
+    ]
+    for pat in patterns:
+        for m in re.finditer(pat, text, re.I):
+            ref = re.sub(r"\s+", "", m.group(1).upper()).replace("&", "")
+            # Preserve P151MN style from P151M&N
+            ref = ref.replace("P151MN", "P151MN")
+            if ref not in refs:
+                refs.append(ref)
+    return refs
 
 
-def detect_weekly_rates(text):
-    rates = []
-    for m in re.finditer(r"£\s*([0-9,]+\.\d{2})\s*(?:per\s*)?week", text, re.I):
-        rates.append(float(m.group(1).replace(",", "")))
-    for m in re.finditer(r"Weekly\s*Rate[:\s]*([0-9,]+\.\d{2})", text, re.I):
-        rates.append(float(m.group(1).replace(",", "")))
-    return sorted(set(rates))
+def po_quality(ref: str) -> str:
+    if re.search(r"P\d{2,4}[A-Z]*/H\d{3,5}", safe_text(ref), re.I):
+        return "Full"
+    if re.search(r"P\d{2,4}", safe_text(ref), re.I):
+        return "Weak"
+    return "Missing"
 
 
-def detect_net_total(text):
-    for pat in [r"Sub-?Total\s*£?\s*([0-9,]+\.\d{2})", r"Goods\s*Total\s*£?\s*([0-9,]+\.\d{2})", r"NET\s*£\s*([0-9,]+\.\d{2})"]:
-        m = re.search(pat, text, re.I)
-        if m:
-            return float(m.group(1).replace(",", ""))
-    monies = [float(x.replace(",", "")) for x in MONEY_RE.findall(text)]
-    return max(monies) if monies else None
+def extract_rates_and_values(text: str) -> List[float]:
+    vals = []
+    patterns = [
+        r"£\s*(\d+(?:,\d{3})*(?:\.\d{1,2})?)\s*per\s+week",
+        r"Weekly\s+Rate\s*[:]?\s*(\d+(?:,\d{3})*(?:\.\d{1,2})?)",
+        r"\bRate\s*[:]?\s*£?\s*(\d+(?:,\d{3})*(?:\.\d{1,2})?)",
+        r"\bUnit\s+price\s+Net\s+amount",  # marker only; rows parsed below
+    ]
+    for pat in patterns[:3]:
+        for m in re.finditer(pat, text, re.I):
+            v = money_to_float(m.group(1))
+            if v is not None:
+                vals.append(v)
+    # Generic currency values, useful for purchase/repair/damage where no weekly label exists
+    for m in re.finditer(r"£\s*(\d+(?:,\d{3})*(?:\.\d{1,2})?)", text):
+        v = money_to_float(m.group(1))
+        if v is not None:
+            vals.append(v)
+    # SMT / parts tables: quantity unit unit price net
+    for m in re.finditer(r"\b\d+\.\d{2}\s+[A-Z]{2,4}\s+(\d+(?:\.\d{1,2})?)\s+(\d+(?:\.\d{1,2})?)", text):
+        vals.extend([float(m.group(1)), float(m.group(2))])
+    # de-dupe approx
+    clean = []
+    for v in vals:
+        if v > 0 and all(abs(v - x) > 0.009 for x in clean):
+            clean.append(round(v, 2))
+    return clean
 
 
-def classify_invoice(text):
-    low = text.lower()
-    if any(k in low for k in ["puncture", "tyre", "tire"]):
-        return "Repair/Maintenance"
-    if any(k in low for k in ["loss of hired equipment", "damage", "wear charge"]):
-        return "Damage/Charges"
-    if any(k in low for k in ["operated", "operator", "dozer", "gps"]):
+def extract_net_total(text: str) -> Optional[float]:
+    patterns = [
+        r"Goods\s+Total\s*£?\s*(\d+(?:,\d{3})*(?:\.\d{1,2})?)",
+        r"Sub[- ]?Total\s*£?\s*(\d+(?:,\d{3})*(?:\.\d{1,2})?)",
+        r"Net\s+value\s*\n?\s*(\d+(?:,\d{3})*(?:\.\d{1,2})?)",
+        r"NET\s*£\s*(\d+(?:,\d{3})*(?:\.\d{1,2})?)",
+        r"Subtotal\s*£\s*(\d+(?:,\d{3})*(?:\.\d{1,2})?)",
+    ]
+    for pat in patterns:
+        matches = list(re.finditer(pat, text, re.I))
+        if matches:
+            return money_to_float(matches[-1].group(1))
+    return None
+
+
+def classify_invoice(text: str, plant_status: str = "") -> str:
+    combined = f"{plant_status} {text}".upper()
+    line_words = combined
+    if "OPERATED" in line_words or "DOZER" in line_words and ("DAYS" in line_words or "OPERATED" in line_words):
         return "Operated Plant"
-    if any(k in low for k in ["delivery", "collection", "haulage", "transport"]):
-        if any(k in low for k in ["hire invoice", "weekly", "per week"]):
+    if any(w in line_words for w in ["DELIVERY", "COLLECTION", "HAULAGE", "TRANSPORT", "MOVEMENT", "LOW LOADER"]):
+        # Only return pure movement if not clearly hire too
+        if any(w in line_words for w in ["HIRE", "WEEK", "HIRED", "HIRE ITEMS"]):
             return "Hire + Movement"
         return "Movement"
-    if any(k in low for k in ["sales invoice", "filter", "parts", "sale items"]):
+    if any(w in line_words for w in ["PUNCTURE", "TYRE", "REPAIR", "SERVICE", "MAINTENANCE"]):
+        return "Repair/Maintenance"
+    if any(w in line_words for w in ["DAMAGE", "LOSS OF HIRED", "LOST", "CHARGE", "WEAR CHARGE"]):
+        return "Damage/Charges"
+    if any(w in line_words for w in ["SALE ITEMS", "SALES INVOICE", "FILTER", "PART", "PCE", "PURCHASE"]):
         return "Purchase"
-    if any(k in low for k in ["hire invoice", "weekly", "per week", "hire period"]):
+    if any(w in line_words for w in ["HIRE", "WEEKLY", "PER WEEK", "CONTRACT STATUS"]):
         return "Hire"
-    return "Unknown"
+    return safe_text(plant_status) or "Unknown"
 
 
-def parse_invoice_record(source_file, text):
-    po, po_quality = detect_po(text)
-    return {
-        "Source File": source_file,
-        "Invoice No": detect_invoice_no(text),
-        "Supplier": detect_supplier(text),
-        "Invoice Date": detect_date(text),
-        "PO / Ref": po,
-        "PO Quality": po_quality,
-        "Type": classify_invoice(text),
-        "Weekly Rates Found": ", ".join(f"£{r:,.2f}" for r in detect_weekly_rates(text)),
-        "Net Total": detect_net_total(text),
-    }
+def plant_order_key(row: pd.Series, colmap: Dict[str, Optional[str]]) -> str:
+    job = safe_text(row.get(colmap.get("job"), "")) if colmap.get("job") else ""
+    order = safe_text(row.get(colmap.get("order"), "")) if colmap.get("order") else ""
+    if job and order and "/" not in job and "/" not in order:
+        return f"{job}/{order}"
+    if order:
+        return order
+    return job
 
 
-def load_pdf_files(uploaded_files):
-    pdfs = []
-    for uploaded in uploaded_files:
-        data = uploaded.read()
-        name = uploaded.name
-        if name.lower().endswith(".zip"):
-            with zipfile.ZipFile(io.BytesIO(data)) as z:
-                for info in z.infolist():
-                    if info.filename.lower().endswith(".pdf"):
-                        pdfs.append((Path(info.filename).name, z.read(info)))
-        elif name.lower().endswith(".pdf"):
-            pdfs.append((name, data))
-    return pdfs
+def find_plant_match(plant: pd.DataFrame, colmap: Dict[str, Optional[str]], refs: List[str]) -> Tuple[Optional[pd.Series], str]:
+    full_refs = [r for r in refs if po_quality(r) == "Full"]
+    if not full_refs:
+        return None, "No usable full order reference on invoice"
+    for ref in full_refs:
+        nref = norm(ref)
+        for _, row in plant.iterrows():
+            key = plant_order_key(row, colmap)
+            if norm(key) == nref or nref in norm(key) or norm(key) in nref:
+                return row, ""
+    return None, "PO/reference not found on Plant tab"
 
 
-def plant_reference_columns(df):
-    cols = {norm(c): c for c in df.columns}
-    def get(*names):
-        for n in names:
-            if norm(n) in cols:
-                return cols[norm(n)]
-        return None
-    return {
-        "supplier": get("Supplier"),
-        "job": get("Job No", "Job Number"),
-        "order": get("Order Number", "Order No"),
-        "description": get("Description"),
-        "fleet": get("Fleet No", "Fleet"),
-        "cost": get("Cost", "Weekly Rate", "Rate"),
-        "status": get("Status"),
-        "off_hire": get("Off Hire Date"),
-    }
+def rate_value_match(invoice_values: List[float], plant_row: pd.Series, colmap: Dict[str, Optional[str]]) -> Tuple[bool, str, str]:
+    plant_vals = []
+    for key in ["cost", "delivery"]:
+        c = colmap.get(key)
+        if c:
+            v = money_to_float(plant_row.get(c))
+            if v is not None and v > 0:
+                plant_vals.append(round(v, 2))
+    if not plant_vals:
+        return False, "", "No rate/value found on Plant row"
+    if not invoice_values:
+        return False, " / ".join(f"£{v:.2f}" for v in plant_vals), "No comparable rate/value found on invoice"
+
+    for pv in plant_vals:
+        for iv in invoice_values:
+            # exact/tolerant match or pro-rata derived value being comparable
+            if abs(pv - iv) <= 0.02:
+                return True, f"£{pv:.2f}", ""
+            # weekly rate pro-rata amounts: don't reject if invoice amount is derived from rate; the weekly rate itself must appear normally
+    return False, " / ".join(f"£{v:.2f}" for v in plant_vals), "Price/rate discrepancy"
 
 
-def prepare_plant(df):
-    c = plant_reference_columns(df)
-    plant = df.copy()
-    plant["__supplier_norm"] = plant[c["supplier"]].map(norm) if c["supplier"] else ""
-    if c["job"] and c["order"]:
-        plant["__po"] = plant[c["job"]].astype(str).str.strip() + "/" + plant[c["order"]].astype(str).str.strip()
-    elif c["order"]:
-        plant["__po"] = plant[c["order"]].astype(str).str.strip()
-    else:
-        plant["__po"] = ""
-    plant["__po"] = plant["__po"].map(clean_po)
-    if c["cost"]:
-        plant["__cost"] = pd.to_numeric(plant[c["cost"]], errors="coerce")
-    else:
-        plant["__cost"] = pd.NA
-    return plant, c
+def reconcile_record(rec: Dict[str, Any], plant: pd.DataFrame, colmap: Dict[str, Optional[str]]) -> Dict[str, Any]:
+    text = rec["text"]
+    supplier = extract_supplier(text)
+    invoice_no = extract_invoice_no(text)
+    invoice_date = extract_invoice_date(text)
+    refs = extract_order_refs(text)
+    ref = refs[0] if refs else ""
+    quality = po_quality(ref)
+    values = extract_rates_and_values(text)
+    net_total = extract_net_total(text)
 
-
-def supplier_score(a, b):
-    if not a or not b:
-        return 0
-    if fuzz:
-        return fuzz.token_set_ratio(str(a), str(b))
-    return 100 if norm(a) in norm(b) or norm(b) in norm(a) else 0
-
-
-def money_to_float(value):
-    if value is None or pd.isna(value):
-        return None
-    text = str(value).replace("£", "").replace(",", "").strip()
-    try:
-        return float(text)
-    except Exception:
-        return None
-
-
-def export_view(df):
-    rename = {
-        "Source File": "PDF File",
-        "Invoice No": "Invoice Number",
-        "PO / Ref": "Order Reference",
-        "PO Quality": "Reference Quality",
-        "Type": "Invoice Type",
-        "Weekly Rates Found": "Agreed Rate / Value",
-        "Net Total": "Invoice Net Total",
-        "Reason": "Unmatched Reason",
-        "Matched Plant Row": "Matched Plant Row",
-        "Result": "Match Status",
-    }
-    out = df.rename(columns=rename).copy()
-    drop_cols = [c for c in out.columns if c.lower() in {"raw text preview", "raw text", "raw"}]
-    if drop_cols:
-        out = out.drop(columns=drop_cols)
-    preferred = [
-        "PDF File", "Invoice Number", "Supplier", "Invoice Date", "Order Reference",
-        "Reference Quality", "Invoice Type", "Agreed Rate / Value", "Invoice Net Total",
-        "Match Status", "Unmatched Reason", "Matched Plant Row"
-    ]
-    existing = [c for c in preferred if c in out.columns]
-    rest = [c for c in out.columns if c not in existing]
-    return out[existing + rest]
-
-
-def reconcile_record(rec, plant, cols):
+    matched_row, ref_reason = find_plant_match(plant, colmap, refs)
+    result = "Unmatched"
     reasons = []
-    matched_row = ""
+    plant_status = ""
+    matched_plant_row = ""
+    agreed_value = ""
 
-    if rec["PO Quality"] != "Full":
-        return "Unmatched", "No usable full order reference on invoice", matched_row
-
-    candidates = plant[plant["__po"] == clean_po(rec["PO / Ref"])]
-    if candidates.empty:
-        return "Unmatched", "PO/order reference not found on Plant tab", matched_row
-
-    supplier_ok = False
-    if cols.get("supplier"):
-        for idx, row in candidates.iterrows():
-            if supplier_score(rec["Supplier"], row[cols["supplier"]]) >= 70:
-                supplier_ok = True
-                matched_row = idx + 2
-                break
+    if matched_row is None:
+        reasons.append(ref_reason)
     else:
-        supplier_ok = True
+        matched_plant_row = matched_row.get("_Plant Row", "")
+        if colmap.get("status"):
+            plant_status = safe_text(matched_row.get(colmap["status"]))
+        inv_type = classify_invoice(text, plant_status)
 
-    if not supplier_ok:
-        reasons.append("PO found but supplier mismatch")
+        # Supplier fuzzy check: useful but not enough to fail where invoice header is weak.
+        plant_supplier = safe_text(matched_row.get(colmap.get("supplier"), "")) if colmap.get("supplier") else ""
+        if plant_supplier and supplier != "Unknown supplier":
+            s1, s2 = norm(plant_supplier), norm(supplier)
+            ratio = fuzz.partial_ratio(s1, s2) if fuzz else (100 if s1 in s2 or s2 in s1 else 0)
+            if ratio < 60:
+                reasons.append("Supplier mismatch")
 
-    invoice_rates = []
-    if rec.get("Weekly Rates Found"):
-        for rate in re.findall(r"[0-9,]+\.\d{2}", str(rec["Weekly Rates Found"])):
-            try:
-                invoice_rates.append(float(rate.replace(",", "")))
-            except Exception:
-                pass
+        ok_value, agreed_value, value_reason = rate_value_match(values, matched_row, colmap)
+        if not ok_value:
+            reasons.append(value_reason)
 
-    invoice_net = money_to_float(rec.get("Net Total"))
-    comparable_invoice_values = invoice_rates[:]
-    if invoice_net is not None:
-        comparable_invoice_values.append(invoice_net)
-
-    plant_values = [float(x) for x in candidates["__cost"].dropna().tolist()]
-
-    # All invoice types now require some comparable rate/value.
-    if not comparable_invoice_values:
-        reasons.append("No comparable rate/value found on invoice")
-    elif not plant_values:
-        reasons.append("No comparable rate/value found on Plant tab")
+        # Off-hire validation: if off-hire date exists and invoice date/period suggests beyond, flag softly.
+        # Full hire-period extraction can be expanded later.
+        if not reasons:
+            result = "Matched"
+    if matched_row is None:
+        inv_type = classify_invoice(text, "")
     else:
-        value_match = False
-        for inv_val in comparable_invoice_values:
-            for plant_val in plant_values:
-                # exact / rate match
-                if abs(inv_val - plant_val) <= 0.02:
-                    value_match = True
-                # allow invoice total to be a multiple/pro-rata of a plant rate, but only if a rate was extracted
-                if invoice_rates and plant_val > 0 and abs((inv_val / plant_val) - round(inv_val / plant_val)) <= 0.03:
-                    value_match = True
-        if not value_match:
-            reasons.append("Price discrepancy / agreed rate or value not found on Plant tab")
+        inv_type = classify_invoice(text, plant_status)
 
-    if reasons:
-        return "Unmatched", "; ".join(reasons), matched_row
+    return {
+        "Source File": rec["source_file"],
+        "Invoice No": invoice_no,
+        "Supplier": supplier,
+        "Invoice Date": invoice_date,
+        "PO / Ref": ref,
+        "PO Quality": quality,
+        "Type": inv_type,
+        "Weekly Rates Found": agreed_value,
+        "Net Total": net_total if net_total is not None else "",
+        "Result": result,
+        "Reason": "; ".join(dict.fromkeys([r for r in reasons if r])) if reasons else "Matched",
+        "Matched Plant Row": matched_plant_row,
+    }
 
-    return "Matched", "Invoice-level match passed", matched_row
+
+def display_df(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+    out = df.copy()
+    for c in list(DROP_EXPORT_COLUMNS):
+        if c in out.columns:
+            out = out.drop(columns=[c])
+    out = out.rename(columns=DISPLAY_COLUMNS)
+    return out
 
 
-def make_excel(summary, matched_df, unmatched_df, all_df, rules_df):
+def make_excel(summary: pd.DataFrame, matched: pd.DataFrame, unmatched: pd.DataFrame, all_records: pd.DataFrame) -> bytes:
     output = io.BytesIO()
-    matched_out = export_view(matched_df)
-    unmatched_out = export_view(unmatched_df)
-    all_out = export_view(all_df)
+    wb = Workbook()
+    wb.remove(wb.active)
 
-    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-        summary.to_excel(writer, index=False, sheet_name="Summary")
-        matched_out.to_excel(writer, index=False, sheet_name="Matched")
-        unmatched_out.to_excel(writer, index=False, sheet_name="Unmatched")
-        all_out.to_excel(writer, index=False, sheet_name="All Extracted Invoices")
-        rules_df.to_excel(writer, index=False, sheet_name="Rules")
+    sheets = {
+        "Summary": summary,
+        "Matched": display_df(matched),
+        "Unmatched": display_df(unmatched),
+        "All Extracted Invoices": display_df(all_records),
+        "Rules": pd.DataFrame({"Rule": RULES}),
+    }
 
-        workbook = writer.book
-        header_fmt = workbook.add_format({"bold": True, "bg_color": "#FFD400", "font_color": "#000000", "border": 1})
-        money_fmt = workbook.add_format({"num_format": "£#,##0.00"})
-        body_fmt = workbook.add_format({"text_wrap": False, "valign": "top"})
+    header_fill = PatternFill("solid", fgColor="FFD400")
+    black_fill = PatternFill("solid", fgColor="111111")
+    white_font = Font(color="FFFFFF", bold=True)
+    black_font = Font(color="000000", bold=True)
+    thin = Side(style="thin", color="D9D9D9")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
 
-        sheet_frames = {
-            "Summary": summary,
-            "Matched": matched_out,
-            "Unmatched": unmatched_out,
-            "All Extracted Invoices": all_out,
-            "Rules": rules_df,
-        }
-        for sheet_name, df in sheet_frames.items():
-            ws = writer.sheets[sheet_name]
-            for col_num, value in enumerate(df.columns.values):
-                ws.write(0, col_num, value, header_fmt)
-                series = df[value].astype(str).replace("nan", "") if not df.empty else pd.Series(dtype=str)
-                max_len = max([len(str(value))] + [len(str(x)) for x in series.head(500).fillna("").tolist()])
-                width = min(max(max_len + 3, 12), 45)
-                ws.set_column(col_num, col_num, width, body_fmt)
-            for money_col in ["Invoice Net Total", "Agreed Rate / Value"]:
-                if money_col in df.columns:
-                    idx = list(df.columns).index(money_col)
-                    ws.set_column(idx, idx, 16, money_fmt)
-            ws.freeze_panes(1, 0)
-            ws.autofilter(0, 0, max(len(df), 1), max(len(df.columns) - 1, 0))
-    output.seek(0)
-    return output
+    for name, df in sheets.items():
+        ws = wb.create_sheet(name[:31])
+        df = df.copy()
+        for r_idx, row in enumerate([list(df.columns)] + df.astype(object).where(pd.notna(df), "").values.tolist(), start=1):
+            for c_idx, val in enumerate(row, start=1):
+                cell = ws.cell(r_idx, c_idx, val)
+                cell.border = border
+                cell.alignment = Alignment(vertical="top", wrap_text=True)
+                if r_idx == 1:
+                    cell.fill = header_fill if name != "Unmatched" else black_fill
+                    cell.font = black_font if name != "Unmatched" else white_font
+        ws.freeze_panes = "A2"
+        if df.shape[1] > 0:
+            ws.auto_filter.ref = ws.dimensions
+        for col_idx in range(1, max(1, df.shape[1]) + 1):
+            max_len = 10
+            for cell in ws[get_column_letter(col_idx)]:
+                text = safe_text(cell.value)
+                max_len = max(max_len, min(len(text), 55))
+            ws.column_dimensions[get_column_letter(col_idx)].width = max_len + 2
+    wb.save(output)
+    return output.getvalue()
 
+# ---------- UI ----------
 
 with st.sidebar:
     if LOGO_PATH.exists():
-        st.image(str(LOGO_PATH), width=120)
-    st.subheader("Rules")
-    for r in RULES:
-        st.caption(f"✓ {r}")
+        st.image(str(LOGO_PATH), width=115)
+    st.markdown("### Rules")
+    for rule in RULES[:10]:
+        st.markdown(f"✓ {rule}")
+    st.markdown("<br><span class='small-note'>PAS Invoice Reconciliation<br>v3.0 extraction upgrade</span>", unsafe_allow_html=True)
+
+logo_html = ""
+if LOGO_PATH.exists():
+    import base64
+    b64 = base64.b64encode(LOGO_PATH.read_bytes()).decode()
+    logo_html = f"<img src='data:image/png;base64,{b64}' />"
+else:
+    logo_html = "<div style='width:76px;height:76px;background:#FFD400;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:28px;'>PAS</div>"
+
+st.markdown(
+    f"""
+<div class='pas-title'>
+    {logo_html}
+    <div>
+        <h1>PAS Invoice Reconciliation</h1>
+        <p>Plant hire invoice matching against the Plant tab.</p>
+    </div>
+</div>
+""",
+    unsafe_allow_html=True,
+)
 
 plant_file = st.file_uploader("Upload latest Plant workbook", type=["xlsx", "xlsm", "xls"])
 invoice_files = st.file_uploader("Upload invoice PDFs or ZIP files", type=["pdf", "zip"], accept_multiple_files=True)
 
-if st.button("Run reconciliation", type="primary", disabled=not (plant_file and invoice_files)):
-    try:
-        plant_df = pd.read_excel(plant_file, sheet_name="Plant")
-        plant, cols = prepare_plant(plant_df)
-        pdfs = load_pdf_files(invoice_files)
-        records = []
-        for filename, data in pdfs:
-            pages = extract_text_from_pdf_bytes(data)
-            for i, invoice_text in enumerate(split_invoice_pages(pages), start=1):
-                rec = parse_invoice_record(filename if len(pages) == 1 else f"{filename} / record {i}", invoice_text)
-                status, reason, matched_row = reconcile_record(rec, plant, cols)
-                rec["Result"] = status
-                rec["Reason"] = reason
-                rec["Matched Plant Row"] = matched_row
-                records.append(rec)
+run = st.button("Run reconciliation")
 
-        results = pd.DataFrame(records)
-        matched_df = results[results["Result"] == "Matched"].copy()
-        unmatched_df = results[results["Result"] != "Matched"].copy()
-        total = len(results)
-        matched = len(matched_df)
-        unmatched = len(unmatched_df)
-        match_pct = round((matched / total * 100), 1) if total else 0
-        matched_value = matched_df["Net Total"].sum(numeric_only=True) if not matched_df.empty else 0
-        unmatched_value = unmatched_df["Net Total"].sum(numeric_only=True) if not unmatched_df.empty else 0
-        summary = pd.DataFrame([
-            {"Metric": "Total invoices processed", "Value": total},
-            {"Metric": "Matched invoices", "Value": matched},
-            {"Metric": "Unmatched invoices", "Value": unmatched},
-            {"Metric": "Match percentage", "Value": f"{match_pct}%"},
-            {"Metric": "Matched net value", "Value": f"£{matched_value:,.2f}"},
-            {"Metric": "Unmatched net value", "Value": f"£{unmatched_value:,.2f}"},
-        ])
-        rules_df = pd.DataFrame({"Rule": RULES})
+if run:
+    if not plant_file or not invoice_files:
+        st.warning("Upload the Plant workbook and invoice PDF/ZIP batch, then run reconciliation.")
+    else:
+        try:
+            plant, colmap = load_plant(plant_file)
+            pdf_files = extract_files(invoice_files)
+            invoice_records = []
+            for filename, data in pdf_files:
+                pages = extract_pages_from_pdf_bytes(data)
+                invoice_records.extend(split_pdf_into_invoice_records(filename, pages))
 
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Total invoices", total)
-        c2.metric("Matched", matched)
-        c3.metric("Unmatched", unmatched)
-        c4.metric("Match %", f"{match_pct}%")
+            rows = [reconcile_record(rec, plant, colmap) for rec in invoice_records]
+            results = pd.DataFrame(rows)
+            if results.empty:
+                st.error("No invoice records could be extracted from the uploaded PDFs.")
+            else:
+                matched_df = results[results["Result"] == "Matched"].copy()
+                unmatched_df = results[results["Result"] != "Matched"].copy()
+                total = len(results)
+                matched_count = len(matched_df)
+                unmatched_count = len(unmatched_df)
+                match_pct = round((matched_count / total) * 100, 1) if total else 0
+                matched_value = pd.to_numeric(matched_df["Net Total"], errors="coerce").sum() if not matched_df.empty else 0
+                unmatched_value = pd.to_numeric(unmatched_df["Net Total"], errors="coerce").sum() if not unmatched_df.empty else 0
+                summary = pd.DataFrame([
+                    {"Metric": "Total invoices processed", "Value": total},
+                    {"Metric": "Matched invoices", "Value": matched_count},
+                    {"Metric": "Unmatched invoices", "Value": unmatched_count},
+                    {"Metric": "Match percentage", "Value": f"{match_pct}%"},
+                    {"Metric": "Matched net value", "Value": f"£{matched_value:,.2f}"},
+                    {"Metric": "Unmatched net value", "Value": f"£{unmatched_value:,.2f}"},
+                ])
 
-        display_unmatched = export_view(unmatched_df)
-        display_all = export_view(results)
+                st.markdown(
+                    f"""
+<div class='metric-row'>
+  <div><div class='metric-label'>Total invoices</div><div class='metric-value'>{total}</div></div>
+  <div><div class='metric-label'>Matched</div><div class='metric-value'>{matched_count}</div></div>
+  <div><div class='metric-label'>Unmatched</div><div class='metric-value'>{unmatched_count}</div></div>
+  <div><div class='metric-label'>Match %</div><div class='metric-value'>{match_pct}%</div></div>
+</div>
+""",
+                    unsafe_allow_html=True,
+                )
 
-        tab1, tab2 = st.tabs(["Unmatched", "All extracted invoices"])
-        with tab1:
-            st.dataframe(display_unmatched, use_container_width=True)
-        with tab2:
-            st.dataframe(display_all, use_container_width=True)
+                tab1, tab2 = st.tabs(["Unmatched", "All extracted invoices"])
+                with tab1:
+                    st.dataframe(display_df(unmatched_df), use_container_width=True, hide_index=True)
+                with tab2:
+                    st.dataframe(display_df(results), use_container_width=True, hide_index=True)
 
-        excel = make_excel(summary, matched_df, unmatched_df, results, rules_df)
-        st.download_button(
-            "Download Excel reconciliation",
-            data=excel,
-            file_name="PAS_Invoice_Reconciliation_Output.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-    except Exception as e:
-        st.error(f"Could not complete reconciliation: {e}")
+                excel = make_excel(summary, matched_df, unmatched_df, results)
+                st.download_button(
+                    "Download Excel reconciliation",
+                    data=excel,
+                    file_name=f"PAS_Reconciliation_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+        except Exception as exc:
+            st.error(f"Could not complete reconciliation: {exc}")
 else:
     st.info("Upload the Plant workbook and invoice PDF/ZIP batch, then run reconciliation.")
