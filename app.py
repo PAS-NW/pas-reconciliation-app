@@ -21,13 +21,20 @@ st.set_page_config(page_title=APP_TITLE, layout="wide")
 st.markdown(
     """
     <style>
-    .stApp { background: #f5f5f5; }
-    .pas-header { background: linear-gradient(135deg, #0A0A0A 0%, #1F1F1F 70%, #FFD400 160%); padding: 22px 26px; border-radius: 22px; display:flex; gap:18px; align-items:center; margin-bottom: 24px; }
-    .pas-title { color:white; font-size:32px; font-weight:900; line-height:1.1; margin:0; }
-    .pas-subtitle { color:#fff3b0; margin-top:6px; font-size:14px; }
-    .metric-card { background:white; border:1px solid #e5e5e5; border-radius:18px; padding:18px; }
-    .matched { color:#047857; font-weight:700; }
-    .unmatched { color:#b91c1c; font-weight:700; }
+    .stApp { background: #f7f7f4; color: #0A0A0A; }
+    [data-testid="stHeader"] { background: #0A0A0A; }
+    [data-testid="stSidebar"] { background: linear-gradient(180deg, #24242c 0%, #171820 100%); }
+    [data-testid="stSidebar"] * { color: #ffffff !important; }
+    .block-container { padding-top: 3rem; max-width: 1280px; }
+    h1, h2, h3, label { color: #0A0A0A !important; }
+    .pas-header-title { color:#0A0A0A !important; font-size:42px; font-weight:900; line-height:1.05; margin:0; letter-spacing:-1px; }
+    .pas-header-subtitle { color:#555555 !important; margin-top:10px; font-size:18px; }
+    .stButton > button[kind="primary"] { background:#FFD400 !important; color:#0A0A0A !important; border:0 !important; font-weight:800 !important; border-radius:10px !important; }
+    .stButton > button[kind="primary"]:hover { background:#e9c200 !important; color:#0A0A0A !important; }
+    [data-testid="stFileUploaderDropzone"] { background:#171820 !important; border: 1px solid #30313a !important; border-radius: 12px !important; }
+    [data-testid="stFileUploaderDropzone"] * { color: #ffffff !important; }
+    .stAlert { border-radius: 12px !important; }
+    div[data-testid="metric-container"] { background:white; border:1px solid #e3e3e3; padding:18px; border-radius:16px; box-shadow:0 2px 12px rgba(0,0,0,.04); }
     </style>
     """,
     unsafe_allow_html=True,
@@ -40,7 +47,7 @@ with st.container():
         if LOGO_PATH.exists():
             st.image(str(LOGO_PATH), width=82)
     with cols[1]:
-        st.markdown(f"<div style='padding-top:5px'><h1 style='margin:0;font-weight:900'>{APP_TITLE}</h1><div>Plant hire invoice matching against the Plant tab</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='padding-top:5px'><div class='pas-header-title'>{APP_TITLE}</div><div class='pas-header-subtitle'>Plant hire invoice matching against the Plant tab.</div></div>", unsafe_allow_html=True)
 
 st.divider()
 
@@ -78,11 +85,14 @@ def norm(s):
 
 
 def clean_po(po):
-    if not po:
+    if po is None or pd.isna(po):
         return ""
-    po = po.upper().replace(" ", "")
+    po = str(po).upper().replace(" ", "")
     po = po.replace("P151M&N", "P151MN")
     po = po.replace("P151M/N", "P151MN")
+    po = po.replace("P151M&AMP;N", "P151MN")
+    if po.endswith(".0"):
+        po = po[:-2]
     return po
 
 
@@ -351,7 +361,8 @@ def make_excel(summary, matched_df, unmatched_df, rules_df):
 
 
 with st.sidebar:
-    st.image(str(LOGO_PATH), width=120)
+    if LOGO_PATH.exists():
+        st.image(str(LOGO_PATH), width=120)
     st.subheader("Rules")
     for r in RULES:
         st.caption(f"✓ {r}")
