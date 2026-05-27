@@ -172,6 +172,32 @@ def build_order_ref(job: str, order: str) -> str:
     return job or order
 
 
+def normalize_order_ref(ref: str) -> str:
+    """Normalise PAS order refs for phased job codes.
+
+    Operational rule:
+    - P153G1/H7697 and P153G2/H7697 should match P153/H7697.
+    - P151M&N/H7516 or P151MN/H7516 should match P151/H7516.
+
+    The H number remains exact; only the job-code phase suffix is stripped.
+    """
+    ref = clean_cell(ref).upper().replace(" ", "")
+    ref = ref.replace("\\", "/")
+    if not ref:
+        return ""
+    # Convert P153G2H7697 to P153G2/H7697 if the slash is missing.
+    ref = re.sub(r"^(P\d{3,4}[A-Z0-9&]*)(H\d{3,6})$", r"\1/\2", ref)
+    m = re.match(r"^(P\d{3,4})([A-Z0-9&]*)/(H\d{3,6})$", ref)
+    if not m:
+        return norm(ref)
+    base, suffix, hire_no = m.groups()
+    # Strip known phase/group suffixes. Keep this deliberately conservative.
+    suffix_clean = suffix.replace("&", "")
+    if suffix_clean in {"G1", "G2", "MN"}:
+        return norm(f"{base}/{hire_no}")
+    return norm(f"{base}{suffix}/{hire_no}")
+
+
 def load_plant_workbook(uploaded_file) -> Tuple[pd.DataFrame, Dict[str, str]]:
     xls = pd.ExcelFile(uploaded_file)
     sheet = "Plant" if "Plant" in xls.sheet_names else xls.sheet_names[0]
@@ -203,7 +229,7 @@ def load_plant_workbook(uploaded_file) -> Tuple[pd.DataFrame, Dict[str, str]]:
         df["__order_ref"] = df.apply(lambda r: build_order_ref(r.get(colmap["job"], ""), r.get(colmap["order"], "")), axis=1)
     else:
         df["__order_ref"] = ""
-    df["__norm_order"] = df["__order_ref"].apply(norm)
+    df["__norm_order"] = df["__order_ref"].apply(normalize_order_ref)
     return df, colmap
 
 
@@ -320,10 +346,10 @@ def split_pdf_into_invoices(filename: str, pages: List[str]) -> List[Dict]:
 def extract_order_refs(text: str) -> List[str]:
     refs = set()
     # Full PAS order references.
-    for m in re.finditer(r"\b(P\d{3,4}[A-Z&]*\s*/\s*H\d{3,6})\b", text, re.I):
+    for m in re.finditer(r"\b(P\d{3,4}[A-Z0-9&]*\s*/\s*H\d{3,6})\b", text, re.I):
         refs.add(m.group(1).upper().replace(" ", ""))
     # Some suppliers remove slash or ampersand spacing e.g. P151MN/H7516.
-    for m in re.finditer(r"\b(P\d{3,4}[A-Z&]*\s*H\d{3,6})\b", text, re.I):
+    for m in re.finditer(r"\b(P\d{3,4}[A-Z0-9&]*\s*H\d{3,6})\b", text, re.I):
         raw = m.group(1).upper().replace(" ", "")
         if "/" not in raw:
             raw = re.sub(r"(P\d{3,4}[A-Z&]*)(H\d+)", r"\1/\2", raw)
@@ -507,7 +533,7 @@ def classify_invoice(text: str, plant_status: str = "") -> str:
 def find_matching_plant_rows(plant_df: pd.DataFrame, refs: List[str]) -> pd.DataFrame:
     if not refs:
         return plant_df.iloc[0:0]
-    norm_refs = [norm(r) for r in refs]
+    norm_refs = [normalize_order_ref(r) for r in refs]
     mask = plant_df["__norm_order"].isin(norm_refs)
     return plant_df[mask].copy()
 
@@ -567,6 +593,7 @@ def reconcile_invoice(inv: Dict, plant_df: pd.DataFrame) -> Dict:
             break
 
     order_ref = refs[0] if refs else ""
+    normalised_order_ref = normalize_order_ref(order_ref) if order_ref else ""
     matched = False
     reason = ""
     variance = None
@@ -585,6 +612,7 @@ def reconcile_invoice(inv: Dict, plant_df: pd.DataFrame) -> Dict:
         "Supplier": supplier,
         "Invoice Date": extract_invoice_date(text),
         "Order Reference": order_ref,
+        "Normalised Order Reference": normalised_order_ref,
         "Reference Quality": "Full" if refs else "Missing",
         "Invoice Type": invoice_type,
         "Plant Status": plant_status,
@@ -658,6 +686,7 @@ def make_excel(summary_df, matched_df, unmatched_df, all_df) -> bytes:
             "Supplier is taken from the Plant row once a full order reference matches.",
             "Movement is only detected from actual charge lines with values, not from Delivery Address/Site Address labels.",
             "Global value extraction checks line rate, weekly rate, daily rate, unit price, line value, total charge and net totals.",
+            "Job-code phases are normalised for matching: P153G1/P153G2 become P153, and P151M&N/P151MN become P151.",
             "Raw Text Preview is excluded from the operational output.",
             "Excel exports use filters, frozen headers and auto-sized columns.",
         ]
