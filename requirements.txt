@@ -4,3 +4,4 @@ openpyxl
 pypdf
 rapidfuzz
 xlsxwriter
+PyPDF2
