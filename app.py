@@ -34,7 +34,13 @@ st.markdown(
     [data-testid="stFileUploaderDropzone"] { background:#171820 !important; border: 1px solid #30313a !important; border-radius: 12px !important; }
     [data-testid="stFileUploaderDropzone"] * { color: #ffffff !important; }
     .stAlert { border-radius: 12px !important; }
-    div[data-testid="metric-container"] { background:white; border:1px solid #e3e3e3; padding:18px; border-radius:16px; box-shadow:0 2px 12px rgba(0,0,0,.04); }
+    div[data-testid="metric-container"] { background:transparent; border:0; padding:0; box-shadow:none; }
+    div[data-testid="metric-container"] label, div[data-testid="metric-container"] [data-testid="stMetricLabel"] { color:#0A0A0A !important; font-weight:700 !important; }
+    div[data-testid="stMetricValue"] { color:#FFD400 !important; font-weight:900 !important; }
+    div[data-testid="stDownloadButton"] button { background:#FFD400 !important; color:#0A0A0A !important; border:0 !important; font-weight:800 !important; border-radius:10px !important; }
+    div[data-testid="stDownloadButton"] button:hover { background:#e9c200 !important; color:#0A0A0A !important; }
+    .stTabs [data-baseweb="tab"] { color:#666 !important; }
+    .stTabs [aria-selected="true"] { color:#0A0A0A !important; font-weight:800 !important; border-bottom-color:#FFD400 !important; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -223,7 +229,6 @@ def parse_invoice_record(source_file, text):
         "Type": classify_invoice(text),
         "Weekly Rates Found": ", ".join(f"£{r:,.2f}" for r in detect_weekly_rates(text)),
         "Net Total": detect_net_total(text),
-        "Raw Text Preview": text[:700].replace("\n", " "),
     }
 
 
@@ -287,19 +292,54 @@ def supplier_score(a, b):
     return 100 if norm(a) in norm(b) or norm(b) in norm(a) else 0
 
 
+def money_to_float(value):
+    if value is None or pd.isna(value):
+        return None
+    text = str(value).replace("£", "").replace(",", "").strip()
+    try:
+        return float(text)
+    except Exception:
+        return None
+
+
+def export_view(df):
+    rename = {
+        "Source File": "PDF File",
+        "Invoice No": "Invoice Number",
+        "PO / Ref": "Order Reference",
+        "PO Quality": "Reference Quality",
+        "Type": "Invoice Type",
+        "Weekly Rates Found": "Agreed Rate / Value",
+        "Net Total": "Invoice Net Total",
+        "Reason": "Unmatched Reason",
+        "Matched Plant Row": "Matched Plant Row",
+        "Result": "Match Status",
+    }
+    out = df.rename(columns=rename).copy()
+    drop_cols = [c for c in out.columns if c.lower() in {"raw text preview", "raw text", "raw"}]
+    if drop_cols:
+        out = out.drop(columns=drop_cols)
+    preferred = [
+        "PDF File", "Invoice Number", "Supplier", "Invoice Date", "Order Reference",
+        "Reference Quality", "Invoice Type", "Agreed Rate / Value", "Invoice Net Total",
+        "Match Status", "Unmatched Reason", "Matched Plant Row"
+    ]
+    existing = [c for c in preferred if c in out.columns]
+    rest = [c for c in out.columns if c not in existing]
+    return out[existing + rest]
+
+
 def reconcile_record(rec, plant, cols):
     reasons = []
-    result = "Unmatched"
     matched_row = ""
 
     if rec["PO Quality"] != "Full":
-        return result, "No usable full order reference on invoice", matched_row
+        return "Unmatched", "No usable full order reference on invoice", matched_row
 
     candidates = plant[plant["__po"] == clean_po(rec["PO / Ref"])]
     if candidates.empty:
-        return result, "PO/order reference not found on Plant tab", matched_row
+        return "Unmatched", "PO/order reference not found on Plant tab", matched_row
 
-    # Supplier check, but do not over-fail if supplier aliases are messy yet.
     supplier_ok = False
     if cols.get("supplier"):
         for idx, row in candidates.iterrows():
@@ -315,19 +355,36 @@ def reconcile_record(rec, plant, cols):
 
     invoice_rates = []
     if rec.get("Weekly Rates Found"):
-        for rate in re.findall(r"[0-9,]+\.\d{2}", rec["Weekly Rates Found"]):
-            invoice_rates.append(float(rate.replace(",", "")))
+        for rate in re.findall(r"[0-9,]+\.\d{2}", str(rec["Weekly Rates Found"])):
+            try:
+                invoice_rates.append(float(rate.replace(",", "")))
+            except Exception:
+                pass
 
-    if invoice_rates:
-        plant_rates = [float(x) for x in candidates["__cost"].dropna().tolist()]
-        rate_match = any(abs(ir - pr) <= 0.02 for ir in invoice_rates for pr in plant_rates)
-        if not rate_match:
-            reasons.append("Price discrepancy / weekly rate not found on Plant tab")
+    invoice_net = money_to_float(rec.get("Net Total"))
+    comparable_invoice_values = invoice_rates[:]
+    if invoice_net is not None:
+        comparable_invoice_values.append(invoice_net)
 
-    if rec["Type"] in ["Damage/Charges", "Repair/Maintenance", "Movement", "Purchase", "Operated Plant"]:
-        # For non-standard invoice types, match based on full PO + supplier where available.
-        if not reasons or reasons == ["Price discrepancy / weekly rate not found on Plant tab"]:
-            reasons = []
+    plant_values = [float(x) for x in candidates["__cost"].dropna().tolist()]
+
+    # All invoice types now require some comparable rate/value.
+    if not comparable_invoice_values:
+        reasons.append("No comparable rate/value found on invoice")
+    elif not plant_values:
+        reasons.append("No comparable rate/value found on Plant tab")
+    else:
+        value_match = False
+        for inv_val in comparable_invoice_values:
+            for plant_val in plant_values:
+                # exact / rate match
+                if abs(inv_val - plant_val) <= 0.02:
+                    value_match = True
+                # allow invoice total to be a multiple/pro-rata of a plant rate, but only if a rate was extracted
+                if invoice_rates and plant_val > 0 and abs((inv_val / plant_val) - round(inv_val / plant_val)) <= 0.03:
+                    value_match = True
+        if not value_match:
+            reasons.append("Price discrepancy / agreed rate or value not found on Plant tab")
 
     if reasons:
         return "Unmatched", "; ".join(reasons), matched_row
@@ -335,25 +392,43 @@ def reconcile_record(rec, plant, cols):
     return "Matched", "Invoice-level match passed", matched_row
 
 
-def make_excel(summary, matched_df, unmatched_df, rules_df):
+def make_excel(summary, matched_df, unmatched_df, all_df, rules_df):
     output = io.BytesIO()
+    matched_out = export_view(matched_df)
+    unmatched_out = export_view(unmatched_df)
+    all_out = export_view(all_df)
+
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
         summary.to_excel(writer, index=False, sheet_name="Summary")
-        matched_df.to_excel(writer, index=False, sheet_name="Matched")
-        unmatched_df.to_excel(writer, index=False, sheet_name="Unmatched")
+        matched_out.to_excel(writer, index=False, sheet_name="Matched")
+        unmatched_out.to_excel(writer, index=False, sheet_name="Unmatched")
+        all_out.to_excel(writer, index=False, sheet_name="All Extracted Invoices")
         rules_df.to_excel(writer, index=False, sheet_name="Rules")
+
         workbook = writer.book
         header_fmt = workbook.add_format({"bold": True, "bg_color": "#FFD400", "font_color": "#000000", "border": 1})
         money_fmt = workbook.add_format({"num_format": "£#,##0.00"})
-        for sheet_name, df in [("Summary", summary), ("Matched", matched_df), ("Unmatched", unmatched_df), ("Rules", rules_df)]:
+        body_fmt = workbook.add_format({"text_wrap": False, "valign": "top"})
+
+        sheet_frames = {
+            "Summary": summary,
+            "Matched": matched_out,
+            "Unmatched": unmatched_out,
+            "All Extracted Invoices": all_out,
+            "Rules": rules_df,
+        }
+        for sheet_name, df in sheet_frames.items():
             ws = writer.sheets[sheet_name]
             for col_num, value in enumerate(df.columns.values):
                 ws.write(0, col_num, value, header_fmt)
-                width = min(max(len(str(value)) + 4, 12), 42)
-                ws.set_column(col_num, col_num, width)
-            if "Net Total" in df.columns:
-                idx = list(df.columns).index("Net Total")
-                ws.set_column(idx, idx, 14, money_fmt)
+                series = df[value].astype(str).replace("nan", "") if not df.empty else pd.Series(dtype=str)
+                max_len = max([len(str(value))] + [len(x) for x in series.head(500).tolist()])
+                width = min(max(max_len + 3, 12), 45)
+                ws.set_column(col_num, col_num, width, body_fmt)
+            for money_col in ["Invoice Net Total", "Agreed Rate / Value"]:
+                if money_col in df.columns:
+                    idx = list(df.columns).index(money_col)
+                    ws.set_column(idx, idx, 16, money_fmt)
             ws.freeze_panes(1, 0)
             ws.autofilter(0, 0, max(len(df), 1), max(len(df.columns) - 1, 0))
     output.seek(0)
@@ -411,15 +486,16 @@ if st.button("Run reconciliation", type="primary", disabled=not (plant_file and 
         c3.metric("Unmatched", unmatched)
         c4.metric("Match %", f"{match_pct}%")
 
-        tab1, tab2, tab3 = st.tabs(["Matched", "Unmatched", "All extracted records"])
-        with tab1:
-            st.dataframe(matched_df, use_container_width=True)
-        with tab2:
-            st.dataframe(unmatched_df, use_container_width=True)
-        with tab3:
-            st.dataframe(results, use_container_width=True)
+        display_unmatched = export_view(unmatched_df)
+        display_all = export_view(results)
 
-        excel = make_excel(summary, matched_df, unmatched_df, rules_df)
+        tab1, tab2 = st.tabs(["Unmatched", "All extracted invoices"])
+        with tab1:
+            st.dataframe(display_unmatched, use_container_width=True)
+        with tab2:
+            st.dataframe(display_all, use_container_width=True)
+
+        excel = make_excel(summary, matched_df, unmatched_df, results, rules_df)
         st.download_button(
             "Download Excel reconciliation",
             data=excel,
