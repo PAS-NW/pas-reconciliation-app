@@ -815,50 +815,91 @@ def calculated_invoice_values(text: str) -> List[float]:
 
 
 def values_match(plant_values: List[float], invoice_values: List[float], line_items: Optional[List[Dict[str, float]]] = None, tolerance: float = 0.02) -> Tuple[bool, str, Optional[float]]:
-    plant_values = [round(v, 2) for v in plant_values if v is not None and not pd.isna(v) and v > 0]
-    invoice_values = [round(v, 2) for v in invoice_values if v is not None and not pd.isna(v) and v > 0]
+    """Validate invoice values against Plant values.
+
+    Important behaviour:
+    - If structured invoice lines are found, validate the invoice as a set of lines, not one isolated rate.
+    - This prevents one matching rate from approving an invoice that also has an unmatched extra charge.
+    - Supports pro-rata weekly hire where invoices show "£x per week for y weeks, z days".
+    - Supports combined Plant rows where invoice has multiple lines but the Plant row has one combined value.
+    """
+    plant_values = sorted(set(round(float(v), 2) for v in plant_values if v is not None and not pd.isna(v) and float(v) > 0))
+    invoice_values = sorted(set(round(float(v), 2) for v in invoice_values if v is not None and not pd.isna(v) and float(v) > 0))
     line_items = line_items or []
-    line_rates = [round(float(x.get("rate", 0)), 2) for x in line_items if x.get("rate") is not None and x.get("rate", 0) > 0]
-    line_charges = [round(float(x.get("charge", 0)), 2) for x in line_items if x.get("charge") is not None and x.get("charge", 0) > 0]
+
+    line_rates = []
+    line_charges = []
+    validated_prorata_lines = []
+
+    for item in line_items:
+        rate = item.get("rate")
+        charge = item.get("charge")
+        days = item.get("days")
+        if rate is not None and float(rate) > 0:
+            line_rates.append(round(float(rate), 2))
+        if charge is not None and float(charge) > 0:
+            line_charges.append(round(float(charge), 2))
+        if rate is not None and charge is not None and days is not None:
+            expected = round(float(rate) / 5 * float(days), 2)
+            if close_money(expected, float(charge), 0.03):
+                validated_prorata_lines.append(round(float(rate), 2))
+
+    line_rates = sorted(set(line_rates))
+    line_charges = sorted(set(line_charges))
 
     if not plant_values:
         return False, "No agreed rate/value found on Plant tab", None
     if not invoice_values and not line_rates and not line_charges:
         return False, "No comparable rate/value found on invoice", None
 
-    for pv in plant_values:
-        for iv in invoice_values + line_rates + line_charges:
-            if close_money(pv, iv, tolerance):
-                return True, "Rate/value matched", 0.0
-            if pv and abs(pv - iv) / pv <= 0.005:
-                return True, "Rate/value matched within rounding tolerance", round(iv - pv, 2)
-
     plant_sum = round(sum(plant_values), 2)
     rate_sum = round(sum(line_rates), 2) if line_rates else None
     charge_sum = round(sum(line_charges), 2) if line_charges else None
     invoice_sum = round(sum(invoice_values), 2) if invoice_values else None
 
-    comparable_sums = [x for x in [rate_sum, charge_sum, invoice_sum] if x is not None and x > 0]
-    for comp in comparable_sums:
+    # Structured line validation comes first. This is the key invoice-level safety check.
+    if line_rates or line_charges:
+        # Combined Plant row case: e.g. Excavator + forks on invoice, one combined value on Plant tab.
+        if rate_sum is not None and close_money(plant_sum, rate_sum, tolerance):
+            return True, "Combined invoice line rates matched Plant value", 0.0
+        if charge_sum is not None and close_money(plant_sum, charge_sum, tolerance):
+            return True, "Combined invoice line charges matched Plant value", 0.0
+
+        # Pro-rata weekly hire case: invoice rates match Plant rates and line charges calculate correctly.
+        if validated_prorata_lines:
+            unmatched_rates = []
+            for rate in line_rates:
+                if not any(close_money(rate, pv, tolerance) for pv in plant_values):
+                    unmatched_rates.append(rate)
+            if not unmatched_rates:
+                return True, "Weekly rates matched and pro-rata hire charges validated", 0.0
+
+        # Multiple Plant rows / multiple invoice lines case: every invoice line rate must be present on Plant.
+        if line_rates:
+            unmatched_rates = []
+            for rate in line_rates:
+                if not any(close_money(rate, pv, tolerance) for pv in plant_values):
+                    unmatched_rates.append(rate)
+            if not unmatched_rates:
+                return True, "Invoice line rates matched Plant values", 0.0
+            return False, "Additional or unmatched invoice charge line found", None
+
+    # Fallback: direct value/rate matching where no structured lines were found.
+    for pv in plant_values:
+        for iv in invoice_values:
+            if close_money(pv, iv, tolerance):
+                return True, "Rate/value matched", 0.0
+            if pv and abs(pv - iv) / pv <= 0.005:
+                return True, "Rate/value matched within rounding tolerance", round(iv - pv, 2)
+
+    for comp in [x for x in [rate_sum, charge_sum, invoice_sum] if x is not None and x > 0]:
         if close_money(plant_sum, comp, tolerance):
-            return True, "Combined invoice lines matched Plant value", 0.0
+            return True, "Combined invoice values matched Plant value", 0.0
         for pv in plant_values:
             if close_money(pv, comp, tolerance):
-                return True, "Combined invoice lines matched agreed value", 0.0
+                return True, "Combined invoice values matched agreed value", 0.0
 
-    for item in line_items:
-        rate = item.get("rate")
-        charge = item.get("charge")
-        days = item.get("days")
-        if rate is None or charge is None:
-            continue
-        for pv in plant_values:
-            if close_money(pv, rate, tolerance):
-                expected = round(float(rate) / 5 * float(days), 2) if days is not None else None
-                if expected is None or close_money(expected, charge, 0.03):
-                    return True, "Weekly rate matched and pro-rata hire charge validated", 0.0
-
-    nearest_candidates = invoice_values + line_rates + line_charges + comparable_sums
+    nearest_candidates = invoice_values + line_rates + line_charges + [x for x in [rate_sum, charge_sum, invoice_sum] if x is not None and x > 0]
     if nearest_candidates:
         nearest = min((iv - pv for pv in plant_values for iv in nearest_candidates), key=lambda x: abs(x))
         return False, f"Price discrepancy: nearest variance £{nearest:.2f}", nearest
