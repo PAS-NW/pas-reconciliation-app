@@ -24,7 +24,7 @@ PAS_GREY = "#F4F4F4"
 st.set_page_config(
     page_title="PAS Plant Invoice Matching",
     page_icon="pas_logo.png",
-    layout="wide"
+    layout="wide")
 
 st.markdown(
     f"""
