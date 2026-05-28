@@ -462,11 +462,11 @@ st.markdown(
     .pas-support a {{ color:#006bd6 !important; font-weight:900 !important; margin-left:12px; }}
 
     /* --- uploader chip cleanup: hide Streamlit's ugly uploaded-file pill and use our own card --- */
-    div[data-testid="stFileUploader"] [data-testid="stFileUploaderFile"] { display: none !important; }
-    div[data-testid="stFileUploaderDropzone"] { background: transparent !important; border: 0 !important; padding: 0 !important; min-height: 0 !important; }
-    div[data-testid="stFileUploaderDropzoneInstructions"] { display: none !important; }
-    div[data-testid="stFileUploader"] section { background: transparent !important; border: 0 !important; min-height: 0 !important; padding: 0 !important; }
-    div[data-testid="stFileUploader"] button {
+    div[data-testid="stFileUploader"] [data-testid="stFileUploaderFile"] {{ display: none !important; }}
+    div[data-testid="stFileUploaderDropzone"] {{ background: transparent !important; border: 0 !important; padding: 0 !important; min-height: 0 !important; }}
+    div[data-testid="stFileUploaderDropzoneInstructions"] {{ display: none !important; }}
+    div[data-testid="stFileUploader"] section {{ background: transparent !important; border: 0 !important; min-height: 0 !important; padding: 0 !important; }}
+    div[data-testid="stFileUploader"] button {{
         background: #ffffff !important;
         color: #0A0A0A !important;
         border: 1px solid #d7dce3 !important;
@@ -474,19 +474,19 @@ st.markdown(
         font-weight: 900 !important;
         min-height: 44px !important;
         box-shadow: 0 2px 8px rgba(0,0,0,.06) !important;
-    }
-    .pas-file-card {
+    }}
+    .pas-file-card {{
         display:flex; align-items:center; gap:14px;
         background:#f4f6f8; border:1px solid #dfe4ea; border-radius:12px;
         padding:11px 14px; min-height:54px; margin: 4px 0 12px;
-    }
-    .pas-file-icon { width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:950; font-size:11px; box-shadow:0 2px 8px rgba(0,0,0,.12); flex:none; }
-    .pas-file-icon.excel { background:#118a3b; }
-    .pas-file-icon.pdf { background:#df1f2d; }
-    .pas-file-main { flex:1; min-width:0; }
-    .pas-file-name { color:#0A0A0A; font-weight:950; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .pas-file-size { color:#4b5563; font-weight:650; font-size:13px; margin-top:2px; }
-    .pas-file-check { width:24px; height:24px; border-radius:50%; background:#108a37; color:white; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:950; flex:none; }
+    }}
+    .pas-file-icon {{ width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:950; font-size:11px; box-shadow:0 2px 8px rgba(0,0,0,.12); flex:none; }}
+    .pas-file-icon.excel {{ background:#118a3b; }}
+    .pas-file-icon.pdf {{ background:#df1f2d; }}
+    .pas-file-main {{ flex:1; min-width:0; }}
+    .pas-file-name {{ color:#0A0A0A; font-weight:950; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
+    .pas-file-size {{ color:#4b5563; font-weight:650; font-size:13px; margin-top:2px; }}
+    .pas-file-check {{ width:24px; height:24px; border-radius:50%; background:#108a37; color:white; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:950; flex:none; }}
     </style>
     """,
     unsafe_allow_html=True,
