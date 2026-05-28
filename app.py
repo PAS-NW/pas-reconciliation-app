@@ -76,7 +76,7 @@ st.markdown(
 
     /* Sidebar logo alignment: lift PAS logo so its top lines up with the main hero panel */
     section[data-testid="stSidebar"] div[data-testid="stImage"] {{
-        margin-top: -34px !important;
+        margin-top: -10px !important;
         margin-bottom: 18px !important;
     }}
 
@@ -127,33 +127,33 @@ st.markdown(
     }}
     .pas-truck-bed {{
         position: absolute;
-        left: 1px;
-        top: 10px;
-        width: 42px;
-        height: 23px;
+        left: 0px;
+        top: 8px;
+        width: 43px;
+        height: 24px;
         background: #FFD400;
         border: 3px solid #0A0A0A;
-        border-radius: 5px 3px 4px 4px;
-        transform: skewX(-13deg);
-        box-shadow: inset 0 -4px 0 rgba(0,0,0,0.10);
+        border-radius: 5px 3px 5px 5px;
+        transform: skewX(-16deg);
+        box-shadow: inset 0 -5px 0 rgba(0,0,0,0.12);
     }}
     .pas-truck-bed::before {{
         content: "";
         position: absolute;
-        top: -8px;
-        right: -4px;
-        width: 26px;
+        top: -7px;
+        right: -3px;
+        width: 27px;
         height: 8px;
         background: #FFD400;
         border: 3px solid #0A0A0A;
         border-bottom: 0;
         border-radius: 4px 4px 0 0;
-        transform: skewX(13deg);
+        transform: skewX(16deg);
     }}
     .pas-truck-logo {{
         position: absolute;
         left: 10px;
-        top: 17px;
+        top: 14px;
         font-size: 10px;
         line-height: 10px;
         font-weight: 1000;
@@ -164,18 +164,18 @@ st.markdown(
     .pas-truck-cab {{
         position: absolute;
         left: 42px;
-        top: 12px;
-        width: 22px;
-        height: 21px;
+        top: 11px;
+        width: 23px;
+        height: 22px;
         background: #FFD400;
         border: 3px solid #0A0A0A;
-        border-radius: 4px 5px 3px 2px;
+        border-radius: 5px 5px 3px 2px;
         box-shadow: inset -3px -3px 0 rgba(0,0,0,0.08);
     }}
     .pas-truck-window {{
         position: absolute;
         left: 47px;
-        top: 15px;
+        top: 14px;
         width: 9px;
         height: 9px;
         background: #9fc7cc;
@@ -184,7 +184,7 @@ st.markdown(
     }}
     .pas-truck-nose {{
         position: absolute;
-        left: 61px;
+        left: 62px;
         top: 23px;
         width: 8px;
         height: 8px;
