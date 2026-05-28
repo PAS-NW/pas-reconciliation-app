@@ -29,6 +29,8 @@ st.markdown(
     .stApp {{ background: #f5f5f5; }}
     section[data-testid="stSidebar"] {{ background: {PAS_BLACK}; color: white; }}
     section[data-testid="stSidebar"] * {{ color: white; }}
+    section[data-testid="stSidebar"] div[data-testid="stImage"] {{ margin-top: -1.15rem !important; }}
+    section[data-testid="stSidebar"] div[data-testid="stImage"] img {{ display:block; }}
     .block-container {{ padding-top: 1.4rem; padding-bottom: 2rem; }}
     .pas-hero {{
         background: linear-gradient(135deg, {PAS_BLACK} 0%, #202020 74%, {PAS_YELLOW} 135%);
@@ -84,24 +86,24 @@ st.markdown(
     .pas-chase-stage {
         position: relative;
         width: 100%;
-        height: 42vh;
-        min-height: 260px;
+        height: 56vh;
+        min-height: 430px;
         overflow: hidden;
-        margin-top: 8px;
+        margin-top: 0;
         background: transparent;
     }
     .pas-chase-ground {
         position: absolute;
         left: 2%;
         right: 2%;
-        bottom: 18px;
+        bottom: 0;
         height: 1px;
         background: linear-gradient(90deg, transparent, #d7d7d7 12%, #d7d7d7 88%, transparent);
         opacity: 0.72;
     }
     .pas-chase-runner {
         position: absolute;
-        bottom: 18px;
+        bottom: 1px;
         left: -230px;
         width: 230px;
         height: 70px;
@@ -153,7 +155,7 @@ st.markdown(
     .pas-truck .pas-text {
         position: absolute;
         left: 18px;
-        top: 21px;
+        top: 17px;
         font-weight: 1000;
         font-size: 14px;
         color: #111;
@@ -258,57 +260,43 @@ st.markdown(
 
     .pas-stickman {
         position: absolute;
-        left: 138px;
-        bottom: 4px;
-        width: 40px;
-        height: 50px;
-        animation: pas-stick-bounce .28s ease-in-out infinite alternate;
+        left: 132px;
+        bottom: 2px;
+        width: 34px;
+        height: 48px;
+        animation: pas-stick-bounce .25s ease-in-out infinite alternate;
     }
-    @keyframes pas-stick-bounce { from { transform: translateY(0); } to { transform: translateY(-3px); } }
-    .pas-stickman .head {
-        position: absolute;
-        left: 13px;
-        top: 2px;
-        width: 13px;
-        height: 13px;
-        border: 3px solid #111;
-        border-radius: 50%;
-        background: #fff;
+    @keyframes pas-stick-bounce { from { transform: translateY(0); } to { transform: translateY(-2px); } }
+    .pas-stickman svg {
+        width: 34px;
+        height: 48px;
+        overflow: visible;
     }
-    .pas-stickman .body {
-        position: absolute;
-        left: 19px;
-        top: 17px;
-        width: 3px;
-        height: 18px;
-        background: #111;
-        border-radius: 3px;
-        transform: rotate(8deg);
+    .pas-stickman .stick-stroke {
+        stroke: #111;
+        stroke-width: 4.2;
+        stroke-linecap: round;
+        fill: none;
     }
-    .pas-stickman .arm-a,
-    .pas-stickman .arm-b,
-    .pas-stickman .leg-a,
-    .pas-stickman .leg-b {
-        position: absolute;
-        height: 3px;
-        background: #111;
-        border-radius: 3px;
-        transform-origin: left center;
+    .pas-stickman .stick-head {
+        fill: #fff;
+        stroke: #111;
+        stroke-width: 3.7;
     }
-    .pas-stickman .arm-a { left: 19px; top: 22px; width: 15px; animation: pas-arm-a .36s infinite alternate; }
-    .pas-stickman .arm-b { left: 20px; top: 23px; width: 15px; animation: pas-arm-b .36s infinite alternate; }
-    .pas-stickman .leg-a { left: 20px; top: 34px; width: 18px; animation: pas-leg-a .32s infinite alternate; }
-    .pas-stickman .leg-b { left: 20px; top: 35px; width: 18px; animation: pas-leg-b .32s infinite alternate; }
-    @keyframes pas-arm-a { from { transform: rotate(-35deg); } to { transform: rotate(35deg); } }
-    @keyframes pas-arm-b { from { transform: rotate(42deg); } to { transform: rotate(-28deg); } }
-    @keyframes pas-leg-a { from { transform: rotate(43deg); } to { transform: rotate(-38deg); } }
-    @keyframes pas-leg-b { from { transform: rotate(-45deg); } to { transform: rotate(36deg); } }
+    .pas-stickman .arm-front { transform-origin: 25px 25px; animation: pas-svg-arm-front .30s ease-in-out infinite alternate; }
+    .pas-stickman .arm-back { transform-origin: 25px 25px; animation: pas-svg-arm-back .30s ease-in-out infinite alternate; }
+    .pas-stickman .leg-front { transform-origin: 25px 39px; animation: pas-svg-leg-front .26s ease-in-out infinite alternate; }
+    .pas-stickman .leg-back { transform-origin: 25px 39px; animation: pas-svg-leg-back .26s ease-in-out infinite alternate; }
+    @keyframes pas-svg-arm-front { from { transform: rotate(28deg); } to { transform: rotate(-34deg); } }
+    @keyframes pas-svg-arm-back { from { transform: rotate(-34deg); } to { transform: rotate(30deg); } }
+    @keyframes pas-svg-leg-front { from { transform: rotate(-34deg); } to { transform: rotate(34deg); } }
+    @keyframes pas-svg-leg-back { from { transform: rotate(34deg); } to { transform: rotate(-34deg); } }
     .pas-stickman .run-lines {
         position: absolute;
-        left: -26px;
-        top: 24px;
+        left: -25px;
+        top: 25px;
         width: 24px;
-        opacity: .5;
+        opacity: .46;
     }
     .pas-stickman .run-lines span {
         display: block;
@@ -1408,13 +1396,15 @@ else:
                     <div class="wheel w2"></div>
                 </div>
                 <div class="pas-stickman">
-                    <div class="head"></div>
-                    <div class="body"></div>
-                    <div class="arm-a"></div>
-                    <div class="arm-b"></div>
-                    <div class="leg-a"></div>
-                    <div class="leg-b"></div>
                     <div class="run-lines"><span></span><span></span></div>
+                    <svg viewBox="0 0 50 60" aria-hidden="true">
+                        <circle class="stick-head" cx="27" cy="10" r="7" />
+                        <line class="stick-stroke" x1="25" y1="18" x2="25" y2="38" />
+                        <line class="stick-stroke arm-front" x1="25" y1="25" x2="42" y2="18" />
+                        <line class="stick-stroke arm-back" x1="25" y1="25" x2="10" y2="31" />
+                        <line class="stick-stroke leg-front" x1="25" y1="38" x2="43" y2="50" />
+                        <line class="stick-stroke leg-back" x1="25" y1="38" x2="9" y2="53" />
+                    </svg>
                 </div>
             </div>
         </div>
