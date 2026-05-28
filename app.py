@@ -543,7 +543,7 @@ with st.sidebar:
         <div class="pas-nav-row"><span class="pas-nav-icon"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg></span><span>Download Reconciliation<br>Spreadsheet</span></div>
         <div class="pas-nav-row"><span class="pas-nav-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg></span><span>Smoke Crack</span></div>
         <div class="pas-sidebar-rule"></div>
-        <div class="pas-sidebar-footer">PAS NW Ltd • v1.0 Prototype Build</div>
+        <div class="pas-sidebar-footer">PAS NW Ltd • Plant Invoice Matching • v1.0 Prototype Build</div>
         """,
         unsafe_allow_html=True,
     )
