@@ -4,6 +4,7 @@ import zipfile
 from pathlib import Path
 from datetime import datetime
 from urllib.parse import quote
+from html import escape
 from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
@@ -27,31 +28,71 @@ st.set_page_config(page_title="PAS Plant Invoice Matching", layout="wide")
 st.markdown(
     f"""
     <style>
-    .stApp {{ background: #f5f5f5; }}
-    section[data-testid="stSidebar"] {{ background: {PAS_BLACK}; color: white; }}
+    .stApp {{ background: #f5f5f5; color: #0A0A0A; }}
+    section[data-testid="stSidebar"] {{
+        background: {PAS_BLACK};
+        color: white;
+        padding-top: 1.45rem;
+    }}
     section[data-testid="stSidebar"] * {{ color: white; }}
-    .block-container {{ padding-top: 1.4rem; padding-bottom: 2rem; }}
+    section[data-testid="stSidebar"] img {{
+        margin-top: 0.15rem;
+        border-radius: 14px;
+    }}
+    .block-container {{
+        padding-top: 1.4rem;
+        padding-bottom: 2rem;
+        max-width: 1500px;
+    }}
+
     .pas-hero {{
-        background: linear-gradient(135deg, {PAS_BLACK} 0%, #202020 74%, {PAS_YELLOW} 135%);
-        border-radius: 22px;
-        padding: 26px 28px;
-        margin-bottom: 20px;
+        background: linear-gradient(135deg, {PAS_BLACK} 0%, #202020 70%, #7a6900 135%);
+        border-radius: 18px;
+        padding: 24px 28px;
+        margin-bottom: 18px;
         box-shadow: 0 8px 25px rgba(0,0,0,0.12);
     }}
-    .pas-title {{ color: white; font-size: 34px; font-weight: 900; margin: 0; letter-spacing: -0.03em; }}
-    .pas-subtitle {{ color: {PAS_YELLOW}; font-size: 15px; margin-top: 4px; }}
+    .pas-title {{
+        color: white;
+        font-size: 32px;
+        font-weight: 900;
+        margin: 0;
+        letter-spacing: -0.03em;
+    }}
+    .pas-subtitle {{
+        color: {PAS_YELLOW};
+        font-size: 14px;
+        margin-top: 4px;
+        font-weight: 800;
+    }}
+
     .kpi-card {{
         background: white;
         border-radius: 18px;
         padding: 18px 20px;
         border: 1px solid #e8e8e8;
-        box-shadow: 0 3px 12px rgba(0,0,0,0.04);
-        min-height: 118px;
+        box-shadow: 0 3px 12px rgba(0,0,0,0.05);
+        min-height: 112px;
     }}
-    .kpi-label {{ color: #333; font-size: 14px; font-weight: 700; margin-bottom: 8px; }}
-    .kpi-value {{ color: {PAS_YELLOW}; font-size: 36px; font-weight: 900; line-height: 1.05; text-shadow: 0 1px 0 #111; }}
-    .kpi-sub {{ color: #555; font-size: 13px; margin-top: 6px; }}
-    .section-card {{ background: white; border-radius: 18px; padding: 20px; border: 1px solid #e9e9e9; }}
+    .kpi-label {{
+        color: #111;
+        font-size: 14px;
+        font-weight: 800;
+        margin-bottom: 8px;
+    }}
+    .kpi-value {{
+        color: {PAS_YELLOW};
+        font-size: 36px;
+        font-weight: 950;
+        line-height: 1.05;
+        text-shadow: 0 1px 0 #111;
+    }}
+    .kpi-sub {{
+        color: #222;
+        font-size: 13px;
+        margin-top: 6px;
+    }}
+
     .stButton > button, .stDownloadButton > button {{
         background: {PAS_YELLOW} !important;
         color: {PAS_BLACK} !important;
@@ -59,248 +100,88 @@ st.markdown(
         border-radius: 12px !important;
         font-weight: 900 !important;
     }}
-    .stTabs [data-baseweb="tab-list"] {{ gap: 8px; }}
-    .stTabs [data-baseweb="tab"] {{
-        background: white;
-        border-radius: 12px 12px 0 0;
-        color: {PAS_BLACK};
-        font-weight: 800;
-        border: 1px solid #ddd;
-    }}
-    .stTabs [aria-selected="true"] {{ background: {PAS_YELLOW} !important; color: {PAS_BLACK} !important; }}
-    div[data-testid="stDataFrame"] div[role="columnheader"] {{
-        background: {PAS_YELLOW} !important;
-        color: {PAS_BLACK} !important;
-        font-weight: 900 !important;
+
+    /* Keep app helper text readable */
+    .stCaption, div[data-testid="stCaptionContainer"], .stMarkdown p, .stInfo {{
+        color: #0A0A0A !important;
     }}
 
-
-    /* Sidebar logo alignment: lift PAS logo so its top lines up with the main hero panel */
-    section[data-testid="stSidebar"] div[data-testid="stImage"] {{
-        margin-top: -10px !important;
-        margin-bottom: 18px !important;
-    }}
-
-    /* Small bottom chase animation - fixed at the bottom of the white content area */
-    .pas-bottom-chase-wrap {{
-        position: fixed;
-        left: 260px;
-        right: 72px;
-        bottom: 18px;
-        height: 86px;
-        pointer-events: none;
-        z-index: 0;
-        overflow: hidden;
-    }}
-    .pas-bottom-ground {{
-        position: absolute;
-        left: 0;
-        right: 0;
-        bottom: 14px;
-        height: 1px;
-        background: rgba(0,0,0,0.12);
-    }}
-    .pas-chase-pack {{
-        position: absolute;
-        bottom: 15px;
-        left: -180px;
-        width: 170px;
-        height: 58px;
-        animation: pas-drive-across 13.5s linear 1 forwards;
-        transform-origin: bottom left;
-    }}
-    @keyframes pas-drive-across {{
-        0% {{ transform: translateX(-190px); }}
-        100% {{ transform: translateX(calc(100vw - 60px)); }}
-    }}
-
-    .pas-truck-mini {{
-        position: absolute;
-        left: 0;
-        bottom: 3px;
-        width: 68px;
-        height: 38px;
-        animation: pas-truck-bob .38s ease-in-out infinite alternate;
-    }}
-    @keyframes pas-truck-bob {{
-        from {{ transform: translateY(0px) rotate(-0.4deg); }}
-        to {{ transform: translateY(1.5px) rotate(0.4deg); }}
-    }}
-    .pas-truck-bed {{
-        position: absolute;
-        left: 0px;
-        top: 8px;
-        width: 43px;
-        height: 24px;
-        background: #FFD400;
-        border: 3px solid #0A0A0A;
-        border-radius: 5px 3px 5px 5px;
-        transform: skewX(-16deg);
-        box-shadow: inset 0 -5px 0 rgba(0,0,0,0.12);
-    }}
-    .pas-truck-bed::before {{
-        content: "";
-        position: absolute;
-        top: -7px;
-        right: -3px;
-        width: 27px;
-        height: 8px;
-        background: #FFD400;
-        border: 3px solid #0A0A0A;
-        border-bottom: 0;
-        border-radius: 4px 4px 0 0;
-        transform: skewX(16deg);
-    }}
-    .pas-truck-logo {{
-        position: absolute;
-        left: 10px;
-        top: 14px;
-        font-size: 10px;
-        line-height: 10px;
-        font-weight: 1000;
+    .pas-results-title {{
         color: #0A0A0A;
-        z-index: 3;
-        letter-spacing: -0.8px;
+        font-size: 26px;
+        font-weight: 950;
+        margin: 22px 0 8px 0;
     }}
-    .pas-truck-cab {{
-        position: absolute;
-        left: 42px;
-        top: 11px;
-        width: 23px;
-        height: 22px;
-        background: #FFD400;
-        border: 3px solid #0A0A0A;
-        border-radius: 5px 5px 3px 2px;
-        box-shadow: inset -3px -3px 0 rgba(0,0,0,0.08);
+    .pas-unmatched-pill {{
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: {PAS_YELLOW};
+        color: {PAS_BLACK};
+        border: 1px solid #111;
+        border-radius: 14px 14px 0 0;
+        padding: 11px 18px;
+        font-weight: 950;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+        margin-top: 4px;
     }}
-    .pas-truck-window {{
-        position: absolute;
-        left: 47px;
-        top: 14px;
-        width: 9px;
-        height: 9px;
-        background: #9fc7cc;
-        border: 2px solid #0A0A0A;
-        border-radius: 2px;
-    }}
-    .pas-truck-nose {{
-        position: absolute;
-        left: 62px;
-        top: 23px;
-        width: 8px;
-        height: 8px;
-        background: #FFD400;
-        border: 3px solid #0A0A0A;
-        border-left: 0;
-        border-radius: 0 4px 4px 0;
-    }}
-    .pas-wheel {{
-        position: absolute;
-        bottom: -1px;
-        width: 14px;
-        height: 14px;
-        background: #0A0A0A;
-        border-radius: 50%;
-        border: 2px solid #0A0A0A;
-        box-shadow: inset 0 0 0 3px #FFD400, inset 0 0 0 5px #0A0A0A;
-        animation: pas-wheel-spin .42s linear infinite;
-    }}
-    .pas-wheel.front {{ left: 50px; }}
-    .pas-wheel.back {{ left: 13px; }}
-    @keyframes pas-wheel-spin {{ to {{ transform: rotate(360deg); }} }}
-    .pas-dust {{
-        position: absolute;
-        left: -18px;
-        bottom: 1px;
-        width: 32px;
-        height: 12px;
-        opacity: .55;
-    }}
-    .pas-dust span {{
-        position: absolute;
-        bottom: 0;
-        background: #c8b99a;
-        border-radius: 50%;
-        animation: pas-dust-puff .75s ease-out infinite;
-    }}
-    .pas-dust span:nth-child(1) {{ width: 13px; height: 7px; left: 2px; animation-delay: 0s; }}
-    .pas-dust span:nth-child(2) {{ width: 18px; height: 9px; left: 12px; animation-delay: .15s; }}
-    .pas-dust span:nth-child(3) {{ width: 9px; height: 5px; left: 24px; animation-delay: .3s; }}
-    @keyframes pas-dust-puff {{
-        0% {{ transform: translateX(10px) scale(.65); opacity: .2; }}
-        55% {{ opacity: .6; }}
-        100% {{ transform: translateX(-12px) scale(1.05); opacity: 0; }}
-    }}
-    .pas-speed-lines {{
-        position: absolute;
-        left: -36px;
-        top: 19px;
-        width: 28px;
-        height: 20px;
-        opacity: .5;
-    }}
-    .pas-speed-lines span {{
-        display: block;
-        height: 2px;
-        margin: 4px 0;
-        background: #777;
-        border-radius: 2px;
-        animation: pas-lines .55s linear infinite;
-    }}
-    .pas-speed-lines span:nth-child(2) {{ width: 18px; margin-left: 8px; animation-delay: .14s; }}
-    .pas-speed-lines span:nth-child(3) {{ width: 24px; margin-left: 2px; animation-delay: .26s; }}
-    @keyframes pas-lines {{ 0% {{ transform: translateX(8px); opacity: 0; }} 50% {{ opacity: .65; }} 100% {{ transform: translateX(-8px); opacity: 0; }} }}
 
-    .pas-stickman {{
-        position: absolute;
-        left: 106px;
-        bottom: 4px;
-        width: 28px;
-        height: 37px;
-        animation: pas-run-bob .28s ease-in-out infinite alternate;
+    .pas-table-wrap {{
+        background: white;
+        border: 1px solid #d9d9d9;
+        border-radius: 0 16px 16px 16px;
+        overflow: auto;
+        box-shadow: 0 4px 18px rgba(0,0,0,0.07);
+        margin-bottom: 18px;
     }}
-    @keyframes pas-run-bob {{ from {{ transform: translateY(0); }} to {{ transform: translateY(2px); }} }}
-    .pas-stick-head {{
-        position: absolute;
-        top: 0;
-        left: 11px;
-        width: 10px;
-        height: 10px;
-        border: 3px solid #111;
-        border-radius: 50%;
+    table.pas-table {{
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+        color: #0A0A0A;
         background: white;
     }}
-    .pas-stick-body {{
-        position: absolute;
-        top: 13px;
-        left: 15px;
-        width: 3px;
-        height: 15px;
-        background: #111;
-        transform: rotate(12deg);
-        border-radius: 2px;
+    table.pas-table thead th {{
+        background: {PAS_YELLOW};
+        color: {PAS_BLACK};
+        font-weight: 950;
+        text-align: left;
+        padding: 11px 12px;
+        border: 1px solid #c7a900;
+        white-space: nowrap;
     }}
-    .pas-stick-arm-a, .pas-stick-arm-b, .pas-stick-leg-a, .pas-stick-leg-b {{
-        position: absolute;
-        width: 3px;
-        height: 13px;
-        background: #111;
-        border-radius: 2px;
-        transform-origin: top center;
+    table.pas-table tbody td {{
+        background: white;
+        color: #0A0A0A;
+        padding: 9px 12px;
+        border: 1px solid #e3e3e3;
+        vertical-align: top;
     }}
-    .pas-stick-arm-a {{ left: 14px; top: 15px; transform: rotate(58deg); animation: pas-arm-a .35s infinite alternate; }}
-    .pas-stick-arm-b {{ left: 16px; top: 16px; transform: rotate(-58deg); animation: pas-arm-b .35s infinite alternate; }}
-    .pas-stick-leg-a {{ left: 16px; top: 26px; transform: rotate(55deg); animation: pas-leg-a .32s infinite alternate; }}
-    .pas-stick-leg-b {{ left: 16px; top: 26px; transform: rotate(-55deg); animation: pas-leg-b .32s infinite alternate; }}
-    @keyframes pas-arm-a {{ to {{ transform: rotate(-45deg); }} }}
-    @keyframes pas-arm-b {{ to {{ transform: rotate(55deg); }} }}
-    @keyframes pas-leg-a {{ to {{ transform: rotate(-40deg); }} }}
-    @keyframes pas-leg-b {{ to {{ transform: rotate(65deg); }} }}
-
-    @media (max-width: 900px) {{
-        .pas-bottom-chase-wrap {{ display: none; }}
+    table.pas-table tbody tr:nth-child(even) td {{
+        background: #fbfbfb;
     }}
-
+    table.pas-table a {{
+        color: #006fd6 !important;
+        font-weight: 800;
+        text-decoration: none;
+    }}
+    table.pas-table a:hover {{
+        text-decoration: underline;
+    }}
+    .pas-note {{
+        color: #0A0A0A;
+        font-size: 13px;
+        margin: 8px 0 16px 0;
+    }}
+    .pas-support {{
+        color: #0A0A0A;
+        font-size: 14px;
+        margin: 16px 0;
+    }}
+    .pas-support a {{
+        color: #006fd6 !important;
+        font-weight: 800;
+    }}
     </style>
     """,
     unsafe_allow_html=True,
@@ -1365,6 +1246,60 @@ def add_query_email_column(df: pd.DataFrame) -> pd.DataFrame:
     return out[cols]
 
 
+
+
+def render_unmatched_table(df: pd.DataFrame):
+    """Render unmatched invoices as a clean white HTML table with PAS yellow headers."""
+    display_df = add_query_email_column(df)
+    if display_df.empty:
+        st.success("No unmatched invoices. Nice one.")
+        return
+
+    # Keep the on-screen table simple and operational.
+    cols = [
+        "Query Supplier",
+        "PDF File",
+        "Invoice Number",
+        "Supplier",
+        "Order Reference",
+        "Invoice Type",
+        "Plant Status",
+        "Agreed Rate / Value",
+        "Unmatched Reason",
+    ]
+    for col in cols:
+        if col not in display_df.columns:
+            display_df[col] = ""
+    display_df = display_df[cols]
+
+    header_html = "".join(f"<th>{escape(str(col))}</th>" for col in cols)
+    body_rows = []
+    for _, row in display_df.iterrows():
+        cells = []
+        for col in cols:
+            value = clean_cell(row.get(col, ""))
+            if col == "Query Supplier" and value:
+                cells.append(f'<td><a href="{escape(value, quote=True)}">✉ Query Supplier</a></td>')
+            else:
+                cells.append(f"<td>{escape(value)}</td>")
+        body_rows.append("<tr>" + "".join(cells) + "</tr>")
+
+    table_html = f"""
+    <div class="pas-unmatched-pill">⚠ Unmatched Invoices</div>
+    <div class="pas-table-wrap">
+      <table class="pas-table">
+        <thead><tr>{header_html}</tr></thead>
+        <tbody>{''.join(body_rows)}</tbody>
+      </table>
+    </div>
+    <div class="pas-note">
+      Showing {len(display_df)} unmatched invoice(s). Query Supplier opens a pre-filled email draft with invoice@pasnw.co.uk CC'd.
+      Mailto links cannot attach PDFs automatically because browsers block file attachments for security.
+    </div>
+    """
+    st.markdown(table_html, unsafe_allow_html=True)
+
+
 def make_excel(summary_df, matched_df, unmatched_df, all_df) -> bytes:
     output = io.BytesIO()
     rules_df = pd.DataFrame({
@@ -1437,24 +1372,16 @@ if run:
         with c4:
             st.markdown(f'<div class="kpi-card"><div class="kpi-label">Match %</div><div class="kpi-value">{match_pct}%</div><div class="kpi-sub">Core KPI</div></div>', unsafe_allow_html=True)
 
-        st.markdown("### Results")
-        tab1, tab2 = st.tabs(["Unmatched", "All extracted invoices"])
-        with tab1:
-            st.dataframe(
-                add_query_email_column(unmatched_df),
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "Query Supplier": st.column_config.LinkColumn(
-                        "Query Supplier",
-                        display_text="Query Supplier",
-                        help="Open Outlook/email draft to query this invoice",
-                    )
-                },
-            )
-            st.caption("Query Supplier opens an email draft with invoice@pasnw.co.uk CC'd. Choose plant@pasnw.co.uk as the sender in Outlook if available.")
-        with tab2:
-            st.dataframe(clean_output_df(all_df), use_container_width=True, hide_index=True)
+        st.markdown('<div class="pas-results-title">Results</div>', unsafe_allow_html=True)
+        render_unmatched_table(unmatched_df)
+        st.markdown(
+            '<div class="pas-support">For queries or support contact: '
+            '<a href="mailto:invoice@pasnw.co.uk">invoice@pasnw.co.uk</a>'
+            '&nbsp;&nbsp;&nbsp;'
+            '<a href="mailto:plant@pasnw.co.uk">plant@pasnw.co.uk</a>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
 
         excel_bytes = make_excel(summary_df, matched_df, unmatched_df, all_df)
         st.download_button(
