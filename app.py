@@ -21,7 +21,7 @@ PAS_BLACK = "#0A0A0A"
 PAS_DARK = "#171717"
 PAS_GREY = "#F4F4F4"
 
-st.set_page_config(page_title="PAS Invoice Reconciliation", layout="wide")
+st.set_page_config(page_title="PAS Plant Invoice Matching", layout="wide")
 
 st.markdown(
     f"""
@@ -79,21 +79,21 @@ st.markdown(
 
 with st.sidebar:
     st.image("pas_logo.png", use_column_width=True)
-    st.markdown("### PAS Reconciliation")
+    st.markdown("### PAS Invoice Reconciliation")
     st.markdown("Upload the Plant workbook and invoice PDFs/ZIP, then export a clean reconciliation workbook.")
     st.markdown("---")
-    st.markdown("**Current rules**")
-    st.markdown("- Invoice-level approval")
-    st.markdown("- Full order reference required")
-    st.markdown("- Global rate/value extraction")
-    st.markdown("- Movement only from actual charge lines")
-    st.markdown("- Multi-page invoices stay together")
+    st.markdown("**Instructions**")
+    st.markdown("- Upload Hire Order Spreadsheet")
+    st.markdown("- Upload ZIP of all invoices to be checked")
+    st.markdown("- Run Reconciliation")
+    st.markdown("- Download Reconciliation Spreadsheet")
+    st.markdown("- Smoke Crack")
 
 st.markdown(
     """
     <div class="pas-hero">
       <div class="pas-title">PAS Invoice Reconciliation</div>
-      <div class="pas-subtitle">PAS NW Ltd · v11 pro-rata hire day validation</div>
+      <div class="pas-subtitle">PAS NW Ltd · v1.0 Prototype Build</div>
     </div>
     """,
     unsafe_allow_html=True,
