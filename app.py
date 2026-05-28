@@ -92,7 +92,7 @@ with st.sidebar:
 st.markdown(
     """
     <div class="pas-hero">
-      <div class="pas-title">PAS Invoice Reconciliation</div>
+      <div class="pas-title">PAS Plant Invoice Matching</div>
       <div class="pas-subtitle">PAS NW Ltd · v1.0 Prototype Build</div>
     </div>
     """,
