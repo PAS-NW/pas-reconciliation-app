@@ -182,6 +182,41 @@ st.markdown(
         color: #006fd6 !important;
         font-weight: 800;
     }}
+
+
+    /* --- hard hide Streamlit's uploaded-file chip/list while keeping uploader button usable --- */
+    div[data-testid="stFileUploader"] [data-testid="stFileUploaderFile"],
+    div[data-testid="stFileUploader"] [data-testid="stFileUploaderFileName"],
+    div[data-testid="stFileUploader"] [data-testid="stFileUploaderFileSize"],
+    div[data-testid="stFileUploader"] ul,
+    div[data-testid="stFileUploader"] div[role="list"],
+    div[data-testid="stFileUploader"] div[role="listitem"] {{
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+    }}
+    div[data-testid="stFileUploader"] div:has(button[title*="Remove"]),
+    div[data-testid="stFileUploader"] div:has(button[aria-label*="Remove"]),
+    div[data-testid="stFileUploader"] div:has(svg[data-testid="DeleteIcon"]) {{
+        display: none !important;
+    }}
+    div[data-testid="stFileUploader"] section > div:not(:has(button)) {{
+        display: none !important;
+    }}
+    div[data-testid="stFileUploader"] button {{
+        background: #ffffff !important;
+        color: #0A0A0A !important;
+        border: 1px solid #d7dce3 !important;
+        border-radius: 10px !important;
+        font-weight: 900 !important;
+        box-shadow: 0 2px 8px rgba(0,0,0,.06) !important;
+    }}
+    div[data-testid="stFileUploader"] button * {{ color:#0A0A0A !important; fill:#0A0A0A !important; stroke:#0A0A0A !important; }}
+
     </style>
     """,
     unsafe_allow_html=True,
