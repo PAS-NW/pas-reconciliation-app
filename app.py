@@ -105,7 +105,7 @@ st.markdown(
         left: -180px;
         width: 170px;
         height: 58px;
-        animation: pas-drive-across 13.5s linear infinite;
+        animation: pas-drive-across 13.5s linear 1 forwards;
         transform-origin: bottom left;
     }}
     @keyframes pas-drive-across {{
