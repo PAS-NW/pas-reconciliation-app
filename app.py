@@ -23,7 +23,7 @@ PAS_BLACK = "#0A0A0A"
 PAS_DARK = "#171717"
 PAS_GREY = "#F4F4F4"
 
-st.set_page_config(page_title="PAS Plant Invoice Matching", layout="wide")
+st.set_page_config(page_title="PAS Plant Invoice Matching", page_icon="pas_logo.png", layout="wide")
 
 st.markdown(
     f"""
@@ -182,6 +182,218 @@ st.markdown(
         color: #006fd6 !important;
         font-weight: 800;
     }}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+st.markdown(
+    """
+    <style>
+    /* Keep sidebar readable on black */
+    section[data-testid="stSidebar"] .stMarkdown p,
+    section[data-testid="stSidebar"] .stMarkdown li,
+    section[data-testid="stSidebar"] .stMarkdown h1,
+    section[data-testid="stSidebar"] .stMarkdown h2,
+    section[data-testid="stSidebar"] .stMarkdown h3,
+    section[data-testid="stSidebar"] .stMarkdown strong,
+    section[data-testid="stSidebar"] .stMarkdown span {
+        color: #ffffff !important;
+    }
+
+    /* Make upload icons visible on dark bars */
+    div[data-testid="stFileUploader"] svg,
+    div[data-testid="stFileUploader"] button svg,
+    div[data-testid="stFileUploader"] [data-testid="stIconMaterial"] {
+        color: #FFD400 !important;
+        fill: #FFD400 !important;
+        stroke: #FFD400 !important;
+    }
+    div[data-testid="stFileUploader"] section {
+        background: #24242d !important;
+        border: 1px solid #30303a !important;
+        border-radius: 12px !important;
+    }
+    div[data-testid="stFileUploader"] button {
+        color: white !important;
+        border-color: #454552 !important;
+        background: #111217 !important;
+    }
+
+    /* Results table: white body, yellow sticky header, 10-row scroll area */
+    .pas-table-wrap {
+        max-height: 510px !important;
+        overflow-y: auto !important;
+        overflow-x: auto !important;
+    }
+    .pas-table-wrap thead th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+    }
+    .pas-note, .pas-support, .pas-support * {
+        color: #0A0A0A !important;
+    }
+
+    /* Bottom chase animation: small, low, runs once */
+    .pas-bottom-chase-wrap {
+        position: fixed;
+        left: calc(18rem + 22px);
+        right: 42px;
+        bottom: 12px;
+        height: 58px;
+        pointer-events: none;
+        z-index: 1;
+        overflow: hidden;
+    }
+    .pas-bottom-ground {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 6px;
+        border-bottom: 1px solid rgba(0,0,0,0.11);
+    }
+    .pas-chase-pack {
+        position: absolute;
+        bottom: 8px;
+        left: -150px;
+        width: 150px;
+        height: 48px;
+        animation: pas-chase-run 13s linear 1 forwards;
+    }
+    @keyframes pas-chase-run {
+        0% { transform: translateX(-120px); opacity: 0; }
+        8% { opacity: 1; }
+        88% { opacity: 1; }
+        100% { transform: translateX(calc(100vw - 90px)); opacity: 0; }
+    }
+    .pas-truck-mini {
+        position: absolute;
+        left: 0;
+        bottom: 5px;
+        width: 54px;
+        height: 30px;
+        filter: drop-shadow(0 1px 1px rgba(0,0,0,.22));
+    }
+    .pas-truck-bed {
+        position: absolute;
+        left: 0;
+        top: 5px;
+        width: 34px;
+        height: 19px;
+        background: #FFD400;
+        border: 3px solid #0A0A0A;
+        border-radius: 4px 2px 3px 5px;
+        transform: skewX(-10deg);
+    }
+    .pas-truck-logo {
+        position: absolute;
+        left: 7px;
+        top: 9px;
+        font-size: 9px;
+        font-weight: 950;
+        color: #0A0A0A;
+        line-height: 1;
+        z-index: 3;
+    }
+    .pas-truck-cab {
+        position: absolute;
+        left: 30px;
+        top: 7px;
+        width: 19px;
+        height: 18px;
+        background: #FFD400;
+        border: 3px solid #0A0A0A;
+        border-radius: 3px 5px 3px 2px;
+        z-index: 2;
+    }
+    .pas-truck-window {
+        position: absolute;
+        left: 34px;
+        top: 10px;
+        width: 7px;
+        height: 7px;
+        background: #a8d8e8;
+        border: 2px solid #0A0A0A;
+        border-radius: 2px;
+        z-index: 4;
+    }
+    .pas-truck-nose {
+        position: absolute;
+        left: 47px;
+        top: 17px;
+        width: 8px;
+        height: 8px;
+        background: #FFD400;
+        border: 3px solid #0A0A0A;
+        border-left: none;
+        border-radius: 0 3px 3px 0;
+    }
+    .pas-wheel {
+        position: absolute;
+        bottom: 0;
+        width: 9px;
+        height: 9px;
+        background: #0A0A0A;
+        border: 2px solid #222;
+        border-radius: 50%;
+        animation: pas-wheel-spin .32s linear infinite;
+        z-index: 5;
+    }
+    .pas-wheel::after {
+        content: "";
+        position: absolute;
+        inset: 2px;
+        background: #FFD400;
+        border-radius: 50%;
+    }
+    .pas-wheel.back { left: 13px; }
+    .pas-wheel.front { left: 41px; }
+    @keyframes pas-wheel-spin { to { transform: rotate(360deg); } }
+
+    .pas-speed-lines { position: absolute; left: -30px; top: 17px; width: 24px; height: 18px; }
+    .pas-speed-lines span { display:block; height:2px; background:#b9b9b9; margin:4px 0; border-radius:2px; animation: pas-flicker .55s linear infinite; }
+    .pas-speed-lines span:nth-child(2) { width: 16px; margin-left: 8px; }
+    .pas-speed-lines span:nth-child(3) { width: 11px; margin-left: 13px; }
+    @keyframes pas-flicker { 50% { opacity:.25; transform: translateX(-5px); } }
+
+    .pas-dust { position:absolute; left:-5px; bottom:0; width:34px; height:14px; opacity:.75; }
+    .pas-dust span { position:absolute; bottom:0; background:#dac6a9; border-radius:50%; animation: pas-dust 1s linear infinite; }
+    .pas-dust span:nth-child(1) { width:12px; height:6px; left:0; }
+    .pas-dust span:nth-child(2) { width:16px; height:7px; left:10px; animation-delay:.2s; }
+    .pas-dust span:nth-child(3) { width:11px; height:5px; left:23px; animation-delay:.4s; }
+    @keyframes pas-dust { 50% { transform: translateX(-8px) scale(1.15); opacity:.4; } }
+
+    .pas-stickman {
+        position: absolute;
+        left: 92px;
+        bottom: 5px;
+        width: 28px;
+        height: 34px;
+        animation: pas-runner-bob .35s ease-in-out infinite alternate;
+    }
+    @keyframes pas-runner-bob { from { transform: translateY(1px); } to { transform: translateY(-2px); } }
+    .pas-stick-head {
+        position:absolute;
+        top:0;
+        left:11px;
+        width:8px;
+        height:8px;
+        border:2px solid #111;
+        border-radius:50%;
+        background:white;
+    }
+    .pas-stick-body { position:absolute; left:15px; top:9px; width:2px; height:13px; background:#111; transform: rotate(12deg); transform-origin:top; }
+    .pas-stick-arm-a, .pas-stick-arm-b, .pas-stick-leg-a, .pas-stick-leg-b { position:absolute; width:2px; height:12px; background:#111; transform-origin:top; border-radius:2px; }
+    .pas-stick-arm-a { left:15px; top:11px; transform: rotate(58deg); animation: pas-arm-a .35s linear infinite alternate; }
+    .pas-stick-arm-b { left:15px; top:11px; transform: rotate(-50deg); animation: pas-arm-b .35s linear infinite alternate; }
+    .pas-stick-leg-a { left:16px; top:21px; height:14px; transform: rotate(48deg); animation: pas-leg-a .35s linear infinite alternate; }
+    .pas-stick-leg-b { left:16px; top:21px; height:14px; transform: rotate(-42deg); animation: pas-leg-b .35s linear infinite alternate; }
+    @keyframes pas-arm-a { to { transform: rotate(-45deg); } }
+    @keyframes pas-arm-b { to { transform: rotate(55deg); } }
+    @keyframes pas-leg-a { to { transform: rotate(-45deg); } }
+    @keyframes pas-leg-b { to { transform: rotate(48deg); } }
     </style>
     """,
     unsafe_allow_html=True,
