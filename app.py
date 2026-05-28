@@ -82,7 +82,7 @@ with st.sidebar:
     st.markdown("### PAS Invoice Reconciliation")
     st.markdown("Upload the Plant workbook and invoice PDFs/ZIP, then export a clean reconciliation workbook.")
     st.markdown("---")
-    st.markdown("**Instructions**")
+    st.markdown("**Instructions:**")
     st.markdown("- Upload Hire Order Spreadsheet")
     st.markdown("- Upload ZIP of all invoices to be checked")
     st.markdown("- Run Reconciliation")
