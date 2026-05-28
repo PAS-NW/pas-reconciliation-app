@@ -661,6 +661,93 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+
+st.markdown(
+    """
+    <style>
+    /* === PAS exact layout final overrides === */
+    div[data-testid="stAppViewContainer"] > .main,
+    section.main { background: #f7f8fb !important; }
+    div[data-testid="stMainBlockContainer"],
+    div.block-container,
+    .main .block-container {
+        max-width: none !important;
+        width: 100% !important;
+        padding-top: 0.75rem !important;
+        padding-left: 2.15rem !important;
+        padding-right: 2.15rem !important;
+        padding-bottom: 2.2rem !important;
+    }
+    section[data-testid="stSidebar"] {
+        width: 235px !important;
+        min-width: 235px !important;
+        background: linear-gradient(180deg, #030507 0%, #0d141b 100%) !important;
+    }
+    section[data-testid="stSidebar"] > div {
+        width: 235px !important;
+        padding-left: 16px !important;
+        padding-right: 16px !important;
+        padding-top: 14px !important;
+    }
+    section[data-testid="stSidebar"] img {
+        margin-top: 0 !important;
+        border-radius: 12px !important;
+        box-shadow: 0 8px 20px rgba(0,0,0,.38) !important;
+    }
+    .pas-sidebar-title { font-size: 17px !important; margin-top: 20px !important; line-height: 1.18 !important; }
+    .pas-sidebar-copy, .pas-sidebar-step, .pas-sidebar-footer, .pas-sidebar-step span { color: #ffffff !important; }
+    .pas-sidebar-heading, .pas-sidebar-icon { color: #ffd400 !important; }
+    .pas-hero {
+        margin-top: 0 !important;
+        margin-bottom: 14px !important;
+        min-height: 50px !important;
+        padding: 12px 20px !important;
+        border-radius: 14px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }
+    .pas-hero-logo { width: 34px !important; height: 34px !important; font-size: 14px !important; border-radius: 6px !important; }
+    .pas-hero-text { font-size: 16px !important; font-weight: 950 !important; }
+    .pas-hero-version { font-size: 15px !important; font-weight: 950 !important; }
+    .pas-upload-box-title { color:#0a0a0a !important; font-size:16px !important; font-weight:950 !important; margin-bottom:9px !important; }
+    div[data-testid="stFileUploader"] section {
+        background: #f1f3f6 !important;
+        border: 1px solid #dfe3ea !important;
+        border-radius: 12px !important;
+        padding: 9px 10px !important;
+        min-height: 48px !important;
+        box-shadow: 0 5px 18px rgba(0,0,0,.08) !important;
+    }
+    div[data-testid="stFileUploader"] section div,
+    div[data-testid="stFileUploader"] section span,
+    div[data-testid="stFileUploader"] small { color:#1e293b !important; font-weight:700 !important; }
+    div[data-testid="stFileUploader"] button {
+        color:#111 !important; background:#fff !important; border:1px solid #d9dce3 !important; border-radius:10px !important; font-weight:900 !important; box-shadow:0 2px 8px rgba(0,0,0,.07) !important;
+    }
+    div[data-testid="stFileUploader"] svg { color:#0a0a0a !important; fill:#0a0a0a !important; stroke:#0a0a0a !important; }
+    .stButton > button {
+        min-height:50px !important; border-radius:13px !important; background:linear-gradient(180deg,#ffe15c 0%,#ffd400 100%) !important; border:0 !important; box-shadow:0 7px 16px rgba(255,212,0,.30) !important; font-size:17px !important; font-weight:950 !important;
+    }
+    .kpi-card { min-height:114px !important; border-radius:18px !important; box-shadow:0 5px 16px rgba(0,0,0,.08) !important; padding:20px 22px !important; }
+    .kpi-icon { width:62px !important; height:62px !important; flex:0 0 62px !important; background:rgba(255,212,0,.24) !important; color:#000 !important; }
+    .pas-results-title { margin:14px 0 8px 0 !important; color:#111 !important; }
+    .pas-unmatched-pill { border-radius:13px 13px 0 0 !important; padding:12px 18px !important; background:#ffd400 !important; color:#000 !important; }
+    .pas-table-wrap { width:100% !important; max-height:430px !important; overflow-y:auto !important; background:#fff !important; border-radius:0 16px 16px 16px !important; box-shadow:0 8px 24px rgba(0,0,0,.11) !important; }
+    table.pas-table { width:100% !important; border-collapse:collapse !important; background:#fff !important; color:#111 !important; font-size:14px !important; }
+    table.pas-table thead th { background:#ffd400 !important; color:#000 !important; font-weight:950 !important; padding:12px 14px !important; border:1px solid #e7c200 !important; position:sticky !important; top:0 !important; z-index:5 !important; }
+    table.pas-table tbody td { background:#fff !important; color:#000 !important; padding:10px 14px !important; border:1px solid #e2e5ea !important; font-weight:680 !important; }
+    table.pas-table tbody tr:nth-child(even) td { background:#fbfbfc !important; }
+    table.pas-table a { color:#006ee6 !important; font-weight:900 !important; text-decoration:none !important; }
+    .pas-note, .pas-support, .pas-support * { color:#0a0a0a !important; }
+    .pas-support-row { margin-top:28px !important; align-items:center !important; }
+    .stDownloadButton > button {
+        min-height:60px !important; border-radius:16px !important; background:linear-gradient(180deg,#ffe15c 0%,#ffd400 100%) !important; box-shadow:0 7px 16px rgba(255,212,0,.30) !important; color:#000 !important; font-size:19px !important; font-weight:950 !important; border:0 !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 with st.sidebar:
     st.image("pas_logo.png", use_column_width=True)
     st.markdown('<div class="pas-sidebar-title">PAS Plant<br>Invoice Matching</div>', unsafe_allow_html=True)
@@ -1811,13 +1898,11 @@ def make_excel(summary_df, matched_df, unmatched_df, all_df) -> bytes:
 
 up1, up2 = st.columns(2, gap="large")
 with up1:
-    st.markdown('<div class="pas-upload-card"><div class="pas-upload-title">Upload Material Spreadsheet</div>', unsafe_allow_html=True)
+    st.markdown('<div class="pas-upload-box-title">Upload Material Spreadsheet</div>', unsafe_allow_html=True)
     plant_file = st.file_uploader("Upload Material Spreadsheet", type=["xlsx", "xls"], label_visibility="collapsed")
-    st.markdown('</div>', unsafe_allow_html=True)
 with up2:
-    st.markdown('<div class="pas-upload-card"><div class="pas-upload-title">Upload Invoice PDFs or ZIP</div>', unsafe_allow_html=True)
+    st.markdown('<div class="pas-upload-box-title">Upload Invoice PDFs or ZIP</div>', unsafe_allow_html=True)
     invoice_files = st.file_uploader("Upload Invoice PDFs or ZIP", type=["pdf", "zip"], accept_multiple_files=True, label_visibility="collapsed")
-    st.markdown('</div>', unsafe_allow_html=True)
 
 run = st.button("▶  Run reconciliation", use_container_width=True)
 
