@@ -1398,6 +1398,62 @@ def values_match(plant_values: List[float], invoice_values: List[float], line_it
         return False, f"Price discrepancy: nearest variance £{nearest:.2f}", nearest
     return False, "No comparable rate/value found on invoice", None
 
+
+def extract_supplier_email(text: str) -> str:
+    """Find the best supplier email address from invoice PDF text.
+
+    Priority:
+    1. Real email address printed on the invoice.
+    2. Ignore PAS/internal/no-reply style addresses.
+    3. Prefer accounts/credit/control/hire/sales style supplier mailboxes.
+    """
+    if not text:
+        return ""
+
+    # Normalise OCR spacing around @ and dots where possible.
+    cleaned = text.replace(" ", " ")
+    cleaned = re.sub(r"\s*@\s*", "@", cleaned)
+    cleaned = re.sub(r"\s*\.\s*", ".", cleaned)
+
+    emails = re.findall(r"[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}", cleaned, flags=re.I)
+    if not emails:
+        return ""
+
+    blocked_bits = [
+        "pasnw.co.uk",
+        "no-reply",
+        "noreply",
+        "donotreply",
+        "do-not-reply",
+        "example.com",
+    ]
+
+    def clean_email(email: str) -> str:
+        return email.strip().strip(".,;:)>").lower()
+
+    unique = []
+    for email in emails:
+        email = clean_email(email)
+        if not email or any(bit in email for bit in blocked_bits):
+            continue
+        if email not in unique:
+            unique.append(email)
+
+    if not unique:
+        return ""
+
+    priority_words = [
+        "accounts", "account", "credit", "invoice", "invoices",
+        "hire", "sales", "admin", "office", "orders", "queries"
+    ]
+    for word in priority_words:
+        for email in unique:
+            local = email.split("@", 1)[0]
+            if word in local:
+                return email
+
+    return unique[0]
+
 def reconcile_invoice(inv: Dict, plant_df: pd.DataFrame) -> Dict:
     text = inv["text"]
     refs = extract_order_refs(text)
@@ -1450,11 +1506,13 @@ def reconcile_invoice(inv: Dict, plant_df: pd.DataFrame) -> Dict:
     else:
         matched, reason, variance = values_match(plant_rate_values, invoice_values, line_items)
 
+    supplier_email = extract_supplier_email(text)
     status = "Matched" if matched else "Unmatched"
     return {
         "PDF File": inv["source_file"],
         "Invoice Number": inv.get("invoice_number", "Unknown"),
         "Supplier": supplier,
+        "Supplier Email": supplier_email,
         "Invoice Date": extract_invoice_date(text),
         "Order Reference": order_ref,
         "Normalised Order Reference": normalised_order_ref,
@@ -1527,6 +1585,7 @@ OUTPUT_COLUMNS = [
     "PDF File",
     "Invoice Number",
     "Supplier",
+    "Supplier Email",
     "Order Reference",
     "Invoice Type",
     "Plant Status",
@@ -1551,15 +1610,16 @@ def clean_output_df(df: pd.DataFrame) -> pd.DataFrame:
 def make_query_email_link(row) -> str:
     """Create a mailto link for querying an unmatched invoice.
 
-    This opens the user's default mail client, CCs invoice@pasnw.co.uk,
-    and prepares a supplier query email. The To field is intentionally left
-    blank for now because supplier emails are not yet stored in the Plant sheet.
+    This opens the user's default mail client, sends to the supplier email
+    found on the invoice where available, CCs invoice@pasnw.co.uk,
+    and prepares a supplier query email.
     """
     invoice_no = clean_cell(row.get("Invoice Number", "Unknown")) or "Unknown"
     supplier = clean_cell(row.get("Supplier", "")) or "the supplier"
     order_ref = clean_cell(row.get("Order Reference", "")) or "Not found"
     reason = clean_cell(row.get("Unmatched Reason", "")) or "Invoice did not match the Plant order record"
     pdf_file = clean_cell(row.get("PDF File", ""))
+    supplier_email = clean_cell(row.get("Supplier Email", ""))
 
     subject = f"Invoice Query: {invoice_no}"
     body = (
@@ -1579,7 +1639,8 @@ def make_query_email_link(row) -> str:
         "PAS Plant Team"
     )
 
-    return f"mailto:?cc=invoice@pasnw.co.uk&subject={quote(subject)}&body={quote(body)}"
+    to_part = quote(supplier_email) if supplier_email else ""
+    return f"mailto:{to_part}?cc=invoice@pasnw.co.uk&subject={quote(subject)}&body={quote(body)}"
 
 
 def add_query_email_column(df: pd.DataFrame) -> pd.DataFrame:
@@ -1613,6 +1674,7 @@ def render_unmatched_table(df: pd.DataFrame):
         "PDF File",
         "Invoice Number",
         "Supplier",
+        "Supplier Email",
         "Order Reference",
         "Invoice Type",
         "Plant Status",
@@ -1658,7 +1720,7 @@ def render_unmatched_table(df: pd.DataFrame):
       </table>
     </div>
     <div class="pas-note">
-      Showing {min(len(display_df), 10)} of {len(display_df)} unmatched invoice(s). Query Supplier opens a pre-filled email draft with invoice@pasnw.co.uk CC'd.
+      Showing {min(len(display_df), 10)} of {len(display_df)} unmatched invoice(s). Query Supplier opens a pre-filled email draft to the supplier email where found, with invoice@pasnw.co.uk CC'd.
     </div>
     """
     st.markdown(table_html, unsafe_allow_html=True)
@@ -1752,7 +1814,7 @@ with up_col2:
             st.markdown(f'<div class="pas-file-size">+{len(invoice_files)-3} more file(s) selected</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-run = st.button("▶  Run Reconciliation", use_container_width=True)
+run = st.button("▶  Run reconciliation", use_container_width=True)
 
 if run:
     if not plant_file or not invoice_files:
@@ -1784,13 +1846,13 @@ if run:
 
         c1, c2, c3, c4 = st.columns(4)
         with c1:
-            st.markdown(f'<div class="kpi-card"><div class="kpi-icon"><svg viewBox="0 0 24 24"><path d="M8 7V3h8l4 4v14H6V7z"/><path d="M16 3v5h5"/><path d="M9 13h6"/><path d="M9 17h4"/><path d="M4 7h2v14h12"/></svg></div><div><div class="kpi-label">Total invoices</div><div class="kpi-value">{total}</div><div class="kpi-sub">Invoices Analysed</div></div></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="kpi-card"><div class="kpi-icon"><svg viewBox="0 0 24 24"><path d="M8 7V3h8l4 4v14H6V7z"/><path d="M16 3v5h5"/><path d="M9 13h6"/><path d="M9 17h4"/><path d="M4 7h2v14h12"/></svg></div><div><div class="kpi-label">Total invoices</div><div class="kpi-value">{total}</div><div class="kpi-sub">Detected records</div></div></div>', unsafe_allow_html=True)
         with c2:
-            st.markdown(f'<div class="kpi-card kpi-matched"><div class="kpi-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16.5 9"/></svg></div><div><div class="kpi-label">Matched</div><div class="kpi-value">{matched}</div><div class="kpi-sub">to Spreadsheet.. Good times</div></div></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="kpi-card kpi-matched"><div class="kpi-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16.5 9"/></svg></div><div><div class="kpi-label">Matched</div><div class="kpi-value">{matched}</div><div class="kpi-sub">Approved candidates</div></div></div>', unsafe_allow_html=True)
         with c3:
-            st.markdown(f'<div class="kpi-card kpi-unmatched"><div class="kpi-icon"><svg viewBox="0 0 24 24"><path d="M12 3l10 18H2L12 3z"/><path d="M12 9v5"/><path d="M12 18h.01"/></svg></div><div><div class="kpi-label">Query</div><div class="kpi-value">{unmatched}</div><div class="kpi-sub">to Spreadsheet.. Bad Times</div></div></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="kpi-card kpi-unmatched"><div class="kpi-icon"><svg viewBox="0 0 24 24"><path d="M12 3l10 18H2L12 3z"/><path d="M12 9v5"/><path d="M12 18h.01"/></svg></div><div><div class="kpi-label">Unmatched</div><div class="kpi-value">{unmatched}</div><div class="kpi-sub">Need review</div></div></div>', unsafe_allow_html=True)
         with c4:
-            st.markdown(f'<div class="kpi-card"><div class="kpi-icon"><svg viewBox="0 0 24 24"><path d="M3 20h18"/><path d="M6 16v-4"/><path d="M11 16V8"/><path d="M16 16v-6"/><path d="M19 6l-5 5-3-3-5 5"/></svg></div><div><div class="kpi-label">Match %</div><div class="kpi-value">{match_pct}%</div><div class="kpi-sub">Percentage or whatever..</div></div></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="kpi-card"><div class="kpi-icon"><svg viewBox="0 0 24 24"><path d="M3 20h18"/><path d="M6 16v-4"/><path d="M11 16V8"/><path d="M16 16v-6"/><path d="M19 6l-5 5-3-3-5 5"/></svg></div><div><div class="kpi-label">Match %</div><div class="kpi-value">{match_pct}%</div><div class="kpi-sub">Core KPI</div></div></div>', unsafe_allow_html=True)
 
         st.markdown('<div class="pas-results-title">Results</div>', unsafe_allow_html=True)
         render_unmatched_table(unmatched_df)
@@ -1807,7 +1869,7 @@ if run:
         dl_left, dl_right = st.columns([1.8, 1])
         with dl_right:
             st.download_button(
-                "   Download Excel reconciliation",
+                "⬇  Download Excel reconciliation",
                 data=excel_bytes,
                 file_name=f"PAS_Reconciliation_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
