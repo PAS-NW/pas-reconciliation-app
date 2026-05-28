@@ -29,8 +29,6 @@ st.markdown(
     .stApp {{ background: #f5f5f5; }}
     section[data-testid="stSidebar"] {{ background: {PAS_BLACK}; color: white; }}
     section[data-testid="stSidebar"] * {{ color: white; }}
-    section[data-testid="stSidebar"] div[data-testid="stImage"] {{ margin-top: -1.15rem !important; }}
-    section[data-testid="stSidebar"] div[data-testid="stImage"] img {{ display:block; }}
     .block-container {{ padding-top: 1.4rem; padding-bottom: 2rem; }}
     .pas-hero {{
         background: linear-gradient(135deg, {PAS_BLACK} 0%, #202020 74%, {PAS_YELLOW} 135%);
@@ -74,242 +72,217 @@ st.markdown(
         color: {PAS_BLACK} !important;
         font-weight: 900 !important;
     }}
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
 
 
-st.markdown(
-    """
-    <style>
-    /* Tighter sidebar alignment: move PAS logo nearer to the top of the hero banner */
-    section[data-testid="stSidebar"] div[data-testid="stImage"] {
-        margin-top: -2.35rem !important;
-        margin-bottom: 1.15rem !important;
-    }
-    section[data-testid="stSidebar"] div[data-testid="stImage"] img {
-        display: block;
-    }
+    /* Sidebar PAS logo alignment */
+    section[data-testid="stSidebar"] > div:first-child {{
+        padding-top: 2.05rem !important;
+    }}
+    section[data-testid="stSidebar"] img {{
+        margin-top: 0 !important;
+    }}
 
-    /* Small bottom-only chase animation */
-    .pas-chase-stage {
+    /* Small bottom chase animation - pure CSS, no image dependency */
+    .pas-chase-stage {{
         position: relative;
-        width: 100%;
-        height: calc(100vh - 385px);
-        min-height: 500px;
+        height: 430px;
+        margin-top: 8px;
         overflow: hidden;
-        margin-top: 0;
-        margin-bottom: -22px;
-        background: transparent;
-        pointer-events: none;
-    }
-    .pas-chase-ground {
-        position: absolute;
-        left: 4%;
-        right: 4%;
-        bottom: 0;
-        height: 1px;
-        background: linear-gradient(90deg, transparent, #d8d8d8 15%, #d8d8d8 85%, transparent);
-        opacity: .7;
-    }
-    .pas-chase-runner {
-        position: absolute;
-        bottom: 0;
-        left: -150px;
-        width: 160px;
-        height: 44px;
-        animation: pas-drive-across 14s linear infinite;
-        will-change: transform;
-    }
-    @keyframes pas-drive-across {
-        0% { transform: translateX(-180px); }
-        100% { transform: translateX(calc(100vw - 30px)); }
-    }
-
-    /* Dump truck - intentionally small and simple */
-    .pas-mini-truck {
+        border-bottom: 1px solid #dcdcdc;
+    }}
+    .pas-chase-track {{
         position: absolute;
         left: 0;
-        bottom: 3px;
-        width: 62px;
-        height: 34px;
-        animation: pas-truck-bob .32s ease-in-out infinite alternate;
-    }
-    @keyframes pas-truck-bob {
-        from { transform: translateY(0); }
-        to { transform: translateY(-1.2px); }
-    }
-    .pas-mini-truck .truck-bed {
+        right: 0;
+        bottom: 4px;
+        height: 88px;
+        pointer-events: none;
+    }}
+    .pas-chase-unit {{
         position: absolute;
-        left: 4px;
-        top: 8px;
-        width: 36px;
-        height: 19px;
+        bottom: 0;
+        left: -190px;
+        width: 260px;
+        height: 82px;
+        animation: pas-drive-across 12s linear infinite;
+        transform: scale(0.74);
+        transform-origin: left bottom;
+    }}
+    @keyframes pas-drive-across {{
+        0% {{ left: -210px; }}
+        100% {{ left: calc(100% + 120px); }}
+    }}
+    .pas-speed-line {{
+        position: absolute;
+        height: 2px;
+        background: #9b9b9b;
+        opacity: .55;
+        border-radius: 999px;
+        animation: pas-line-flicker .8s ease-in-out infinite alternate;
+    }}
+    .line-truck-1 {{ width: 28px; left: 2px; bottom: 45px; }}
+    .line-truck-2 {{ width: 20px; left: 14px; bottom: 34px; animation-delay: .2s; }}
+    .line-man-1 {{ width: 26px; left: 190px; bottom: 43px; }}
+    .line-man-2 {{ width: 18px; left: 198px; bottom: 31px; animation-delay: .25s; }}
+    @keyframes pas-line-flicker {{
+        from {{ transform: translateX(0); opacity: .25; }}
+        to {{ transform: translateX(-7px); opacity: .7; }}
+    }}
+    .pas-dust {{
+        position: absolute;
+        left: 36px;
+        bottom: 7px;
+        width: 50px;
+        height: 14px;
+    }}
+    .pas-dust span {{
+        position: absolute;
+        bottom: 0;
+        background: #d9c2a5;
+        opacity: .75;
+        border-radius: 999px;
+        animation: pas-dust-puff .75s ease-in-out infinite alternate;
+    }}
+    .pas-dust span:nth-child(1) {{ width: 20px; height: 9px; left: 0; }}
+    .pas-dust span:nth-child(2) {{ width: 26px; height: 12px; left: 15px; animation-delay: .12s; }}
+    .pas-dust span:nth-child(3) {{ width: 18px; height: 8px; left: 36px; animation-delay: .22s; }}
+    @keyframes pas-dust-puff {{
+        from {{ transform: translateX(0) scale(.9); opacity: .45; }}
+        to {{ transform: translateX(-10px) scale(1.08); opacity: .8; }}
+    }}
+    .pas-truck {{
+        position: absolute;
+        left: 58px;
+        bottom: 18px;
+        width: 86px;
+        height: 43px;
+    }}
+    .pas-truck-bed {{
+        position: absolute;
+        left: 0;
+        bottom: 15px;
+        width: 58px;
+        height: 28px;
         background: #FFD400;
-        border: 2px solid #111;
-        border-radius: 3px 3px 5px 5px;
-        transform: skewX(-10deg);
-        box-shadow: inset 0 -3px 0 rgba(0,0,0,.16);
-    }
-    .pas-mini-truck .truck-bed::before {
+        border: 3px solid #0A0A0A;
+        border-radius: 5px 4px 2px 7px;
+        transform: skewX(-11deg);
+        box-shadow: inset 0 -5px 0 rgba(0,0,0,.08);
+    }}
+    .pas-truck-bed::after {{
+        content: "PAS";
+        position: absolute;
+        left: 15px;
+        top: 7px;
+        transform: skewX(11deg);
+        font-size: 12px;
+        line-height: 1;
+        font-weight: 950;
+        color: #0A0A0A;
+        letter-spacing: -1px;
+    }}
+    .pas-truck-cab {{
+        position: absolute;
+        left: 55px;
+        bottom: 15px;
+        width: 29px;
+        height: 31px;
+        background: #FFD400;
+        border: 3px solid #0A0A0A;
+        border-radius: 5px 8px 3px 3px;
+    }}
+    .pas-truck-cab::before {{
         content: "";
         position: absolute;
-        left: 1px;
-        top: -8px;
-        width: 36px;
-        height: 8px;
-        background: #FFD400;
-        border: 2px solid #111;
-        border-bottom: 0;
-        border-radius: 3px 3px 0 0;
-        transform: skewX(-18deg);
-    }
-    .pas-mini-truck .truck-logo {
+        left: 5px;
+        top: 5px;
+        width: 10px;
+        height: 12px;
+        background: #9bb9c4;
+        border: 2px solid #0A0A0A;
+        border-radius: 3px;
+    }}
+    .pas-truck-nose {{
         position: absolute;
-        left: 13px;
-        top: 11px;
-        font-size: 10px;
-        line-height: 1;
-        font-weight: 1000;
-        letter-spacing: -.8px;
-        color: #111;
-        z-index: 5;
-    }
-    .pas-mini-truck .truck-cab {
-        position: absolute;
-        left: 41px;
-        top: 10px;
-        width: 18px;
+        left: 77px;
+        bottom: 15px;
+        width: 17px;
         height: 18px;
         background: #FFD400;
-        border: 2px solid #111;
-        border-radius: 3px 5px 3px 2px;
-        box-shadow: inset -3px 0 0 rgba(0,0,0,.1);
-    }
-    .pas-mini-truck .truck-cab::before {
-        content: "";
-        position: absolute;
-        left: 3px;
-        top: 2px;
-        width: 7px;
-        height: 7px;
-        background: #9fd0d8;
-        border: 1.7px solid #111;
-        border-radius: 2px;
-    }
-    .pas-mini-truck .truck-nose {
-        position: absolute;
-        left: 56px;
-        top: 21px;
-        width: 7px;
-        height: 7px;
-        background: #FFD400;
-        border: 2px solid #111;
+        border: 3px solid #0A0A0A;
         border-left: 0;
-        border-radius: 0 3px 3px 0;
-    }
-    .pas-mini-truck .truck-wheel {
+        border-radius: 0 6px 3px 0;
+    }}
+    .pas-wheel {{
         position: absolute;
-        bottom: -1px;
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
+        bottom: 7px;
+        width: 19px;
+        height: 19px;
         background: #111;
-        animation: pas-wheel-spin .28s linear infinite;
-    }
-    .pas-mini-truck .truck-wheel::after {
+        border-radius: 50%;
+        border: 3px solid #0A0A0A;
+        animation: pas-wheel-spin .45s linear infinite;
+    }}
+    .pas-wheel::after {{
         content: "";
         position: absolute;
-        inset: 3px;
-        border-radius: 50%;
+        inset: 4px;
         background: #FFD400;
-    }
-    .pas-mini-truck .wheel-one { left: 17px; }
-    .pas-mini-truck .wheel-two { left: 47px; }
-    @keyframes pas-wheel-spin { to { transform: rotate(360deg); } }
-
-    .pas-mini-dust {
-        position: absolute;
-        left: -27px;
-        bottom: 2px;
-        width: 40px;
-        height: 15px;
-    }
-    .pas-mini-dust span {
-        position: absolute;
-        display: block;
         border-radius: 50%;
-        background: rgba(151,117,69,.22);
-        animation: pas-dust-puff .72s ease-in-out infinite;
-    }
-    .pas-mini-dust span:nth-child(1) { width: 17px; height: 8px; left: 13px; bottom: 0; }
-    .pas-mini-dust span:nth-child(2) { width: 12px; height: 6px; left: 3px; bottom: 3px; animation-delay: .16s; }
-    .pas-mini-dust span:nth-child(3) { width: 8px; height: 5px; left: 28px; bottom: 4px; animation-delay: .31s; }
-    @keyframes pas-dust-puff {
-        0%,100% { transform: translateX(0) scale(1); opacity: .28; }
-        50% { transform: translateX(-7px) scale(1.15); opacity: .68; }
-    }
+        border: 2px solid #222;
+    }}
+    .wheel-a {{ left: 25px; }}
+    .wheel-b {{ left: 69px; }}
+    @keyframes pas-wheel-spin {{ to {{ transform: rotate(360deg); }} }}
 
-    .pas-mini-lines {
+    .pas-runner {{
         position: absolute;
-        width: 24px;
-        height: 14px;
-        opacity: .48;
-    }
-    .pas-mini-lines.left { left: -31px; bottom: 21px; }
-    .pas-mini-lines.runner-lines { left: 76px; bottom: 17px; }
-    .pas-mini-lines span {
-        display: block;
-        height: 1.5px;
-        margin: 3px 0;
-        background: #777;
-        border-radius: 2px;
-        animation: pas-lines .36s ease-in-out infinite alternate;
-    }
-    .pas-mini-lines span:nth-child(2) { width: 17px; margin-left: 6px; animation-delay: .08s; }
-    .pas-mini-lines span:nth-child(3) { width: 12px; margin-left: 11px; animation-delay: .15s; }
-    @keyframes pas-lines { from { transform: translateX(0); opacity: .25; } to { transform: translateX(-7px); opacity: .8; } }
-
-    /* Stick man: cleaner, smaller and no sweat beads */
-    .pas-mini-man {
+        left: 178px;
+        bottom: 17px;
+        width: 36px;
+        height: 46px;
+        animation: pas-runner-bob .42s ease-in-out infinite alternate;
+    }}
+    @keyframes pas-runner-bob {{
+        from {{ transform: translateY(0); }}
+        to {{ transform: translateY(-2px); }}
+    }}
+    .runner-head {{
         position: absolute;
-        left: 105px;
-        bottom: 5px;
-        width: 25px;
-        height: 34px;
-        animation: pas-man-bounce .24s ease-in-out infinite alternate;
-    }
-    @keyframes pas-man-bounce { from { transform: translateY(0); } to { transform: translateY(-1.4px); } }
-    .pas-mini-man .head {
-        position: absolute;
-        top: 0;
-        left: 9px;
-        width: 8px;
-        height: 8px;
+        left: 14px;
+        top: 1px;
+        width: 13px;
+        height: 13px;
+        border: 3px solid #111;
+        border-radius: 50%;
         background: #fff;
-        border: 2px solid #111;
-        border-radius: 50%;
-    }
-    .pas-mini-man .body,
-    .pas-mini-man .arm-a,
-    .pas-mini-man .arm-b,
-    .pas-mini-man .leg-a,
-    .pas-mini-man .leg-b {
+    }}
+    .runner-body {{
         position: absolute;
+        left: 19px;
+        top: 16px;
+        width: 3px;
+        height: 19px;
         background: #111;
-        border-radius: 5px;
-        transform-origin: 50% 0;
-    }
-    .pas-mini-man .body { width: 3px; height: 15px; left: 13px; top: 11px; transform: rotate(8deg); }
-    .pas-mini-man .arm-a { width: 3px; height: 13px; left: 13px; top: 15px; animation: pas-arm-a .28s ease-in-out infinite alternate; }
-    .pas-mini-man .arm-b { width: 3px; height: 12px; left: 13px; top: 15px; animation: pas-arm-b .28s ease-in-out infinite alternate; }
-    .pas-mini-man .leg-a { width: 3px; height: 15px; left: 14px; top: 25px; animation: pas-leg-a .25s ease-in-out infinite alternate; }
-    .pas-mini-man .leg-b { width: 3px; height: 14px; left: 13px; top: 25px; animation: pas-leg-b .25s ease-in-out infinite alternate; }
-    @keyframes pas-arm-a { from { transform: rotate(58deg); } to { transform: rotate(-48deg); } }
-    @keyframes pas-arm-b { from { transform: rotate(-55deg); } to { transform: rotate(48deg); } }
-    @keyframes pas-leg-a { from { transform: rotate(-57deg); } to { transform: rotate(48deg); } }
-    @keyframes pas-leg-b { from { transform: rotate(52deg); } to { transform: rotate(-50deg); } }
+        border-radius: 999px;
+        transform: rotate(8deg);
+    }}
+    .runner-arm, .runner-leg {{
+        position: absolute;
+        height: 3px;
+        background: #111;
+        border-radius: 999px;
+        transform-origin: left center;
+    }}
+    .arm-a {{ left: 20px; top: 20px; width: 17px; transform: rotate(-35deg); animation: arm-a .42s ease-in-out infinite alternate; }}
+    .arm-b {{ left: 19px; top: 22px; width: 15px; transform: rotate(145deg); animation: arm-b .42s ease-in-out infinite alternate; }}
+    .leg-a {{ left: 20px; top: 34px; width: 18px; transform: rotate(38deg); animation: leg-a .42s ease-in-out infinite alternate; }}
+    .leg-b {{ left: 20px; top: 34px; width: 18px; transform: rotate(138deg); animation: leg-b .42s ease-in-out infinite alternate; }}
+    @keyframes arm-a {{ to {{ transform: rotate(-8deg); }} }}
+    @keyframes arm-b {{ to {{ transform: rotate(168deg); }} }}
+    @keyframes leg-a {{ to {{ transform: rotate(8deg); }} }}
+    @keyframes leg-b {{ to {{ transform: rotate(160deg); }} }}
+
     </style>
     """,
     unsafe_allow_html=True,
@@ -336,6 +309,41 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+
+
+def render_bottom_chase_animation():
+    st.markdown(
+        """
+        <div class="pas-chase-stage" aria-hidden="true">
+          <div class="pas-chase-track">
+            <div class="pas-chase-unit">
+              <div class="pas-speed-line line-truck-1"></div>
+              <div class="pas-speed-line line-truck-2"></div>
+              <div class="pas-dust"><span></span><span></span><span></span></div>
+              <div class="pas-truck">
+                <div class="pas-truck-bed"></div>
+                <div class="pas-truck-cab"></div>
+                <div class="pas-truck-nose"></div>
+                <div class="pas-wheel wheel-a"></div>
+                <div class="pas-wheel wheel-b"></div>
+              </div>
+              <div class="pas-speed-line line-man-1"></div>
+              <div class="pas-speed-line line-man-2"></div>
+              <div class="pas-runner">
+                <div class="runner-head"></div>
+                <div class="runner-body"></div>
+                <div class="runner-arm arm-a"></div>
+                <div class="runner-arm arm-b"></div>
+                <div class="runner-leg leg-a"></div>
+                <div class="runner-leg leg-b"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 BAD_SUPPLIER_PATTERNS = [
     "invoice", "invoice no", "invoice number", "vat", "vat number", "account", "account no",
@@ -1383,32 +1391,4 @@ if run:
         st.exception(e)
 else:
     st.info("Upload your Plant workbook and invoice PDFs/ZIP, then click Run reconciliation.")
-    st.markdown(
-        """
-        <div class="pas-chase-stage" aria-hidden="true">
-            <div class="pas-chase-ground"></div>
-            <div class="pas-chase-runner">
-                <div class="pas-mini-lines left"><span></span><span></span><span></span></div>
-                <div class="pas-mini-dust"><span></span><span></span><span></span></div>
-                <div class="pas-mini-truck">
-                    <div class="truck-bed"></div>
-                    <div class="truck-logo">PAS</div>
-                    <div class="truck-cab"></div>
-                    <div class="truck-nose"></div>
-                    <div class="truck-wheel wheel-one"></div>
-                    <div class="truck-wheel wheel-two"></div>
-                </div>
-                <div class="pas-mini-lines runner-lines"><span></span><span></span></div>
-                <div class="pas-mini-man">
-                    <div class="head"></div>
-                    <div class="body"></div>
-                    <div class="arm-a"></div>
-                    <div class="arm-b"></div>
-                    <div class="leg-a"></div>
-                    <div class="leg-b"></div>
-                </div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    render_bottom_chase_animation()
