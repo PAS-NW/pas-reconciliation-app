@@ -1,10 +1,9 @@
 import io
 import re
 import zipfile
+import urllib.parse
 from pathlib import Path
 from datetime import datetime
-from urllib.parse import quote
-from html import escape
 from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
@@ -25,523 +24,91 @@ PAS_GREY = "#F4F4F4"
 
 st.set_page_config(page_title="PAS Plant Invoice Matching", page_icon="pas_logo.png", layout="wide")
 
-st.markdown(
-    f"""
-    <style>
-    .stApp {{ background: #f5f5f5; color: #0A0A0A; }}
-    section[data-testid="stSidebar"] {{
-        background: {PAS_BLACK};
-        color: white;
-        padding-top: 1.45rem;
-    }}
-    section[data-testid="stSidebar"] * {{ color: white; }}
-    section[data-testid="stSidebar"] img {{
-        margin-top: 0.15rem;
-        border-radius: 14px;
-    }}
-    .block-container {{
-        padding-top: 1.4rem;
-        padding-bottom: 2rem;
-        max-width: 1500px;
-    }}
+st.markdown(f"""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800;900&display=swap');
+html, body, .stApp {{ background:#f5f6f8 !important; font-family:'Inter',sans-serif !important; color:#071018; }}
+header[data-testid="stHeader"] {{ background:#0d1118 !important; height:42px !important; }}
+section[data-testid="stSidebar"] {{ background:linear-gradient(180deg,#050607 0%,#081018 100%) !important; color:white !important; border-right:1px solid rgba(255,255,255,.06); }}
+section[data-testid="stSidebar"] * {{ color:white !important; }}
+section[data-testid="stSidebar"] [data-testid="stImage"] img {{ border-radius:14px !important; box-shadow:0 14px 34px rgba(0,0,0,.35); }}
+section[data-testid="stSidebar"] .block-container {{ padding-top:1.25rem !important; padding-left:1.15rem !important; padding-right:1.15rem !important; }}
+.block-container {{ max-width:1560px !important; padding-top:.55rem !important; padding-left:2.45rem !important; padding-right:2.45rem !important; padding-bottom:2.4rem !important; }}
+.pas-side-title {{ text-align:center; margin-top:18px; font-size:20px; line-height:1.18; font-weight:900; }}
+.pas-side-rule {{ width:86px; height:4px; background:#FFD400; border-radius:99px; margin:14px auto 22px; }}
+.pas-side-copy {{ font-size:15px; line-height:1.55; font-weight:650; color:#f8f8f8 !important; margin-bottom:28px; }}
+.pas-side-section {{ border-top:1px solid rgba(255,255,255,.22); padding-top:22px; margin-top:22px; }}
+.pas-side-heading {{ color:#FFD400 !important; font-size:20px; font-weight:900; margin-bottom:16px; }}
+.pas-side-step {{ display:flex; gap:13px; align-items:flex-start; margin:17px 0; font-size:15px; font-weight:750; line-height:1.25; }}
+.pas-side-ico {{ width:24px; min-width:24px; color:#FFD400 !important; font-size:22px; line-height:1; text-align:center; }}
+.pas-side-foot {{ border-top:1px solid rgba(255,255,255,.22); margin-top:28px; padding-top:22px; font-size:13px; font-weight:800; color:#f4f4f4 !important; }}
+.pas-topbar {{ display:flex; align-items:center; gap:16px; background:linear-gradient(105deg,#080b0f 0%,#10151b 72%,#b79600 150%); border-radius:16px; min-height:64px; padding:13px 20px; box-shadow:0 12px 34px rgba(0,0,0,.18); margin:0 0 20px; }}
+.pas-mini-logo {{ width:42px; height:42px; border-radius:7px; background:#FFD400; display:flex; align-items:center; justify-content:center; color:#0A0A0A; font-size:16px; font-weight:950; letter-spacing:-1px; }}
+.pas-top-title {{ color:white; font-weight:900; font-size:20px; }} .pas-top-dot {{ color:white; opacity:.8; font-size:17px; }} .pas-top-ver {{ color:#FFD400; font-weight:900; font-size:18px; }}
+.upload-shell {{ background:white; border:1px solid #e6e8ec; border-radius:18px; padding:18px 20px 16px; min-height:124px; box-shadow:0 10px 25px rgba(15,23,42,.08); }}
+.upload-title {{ font-size:16px; font-weight:900; margin-bottom:12px; color:#111827; }}
+.uploaded-card {{ display:flex; align-items:center; gap:15px; background:#f3f5f8; border:1px solid #e2e6ec; border-radius:12px; padding:12px 14px; height:54px; }}
+.file-icon {{ width:34px; height:34px; border-radius:7px; display:flex; align-items:center; justify-content:center; color:white; font-weight:950; font-size:13px; box-shadow:inset 0 -2px 0 rgba(0,0,0,.18); }}
+.file-xlsx {{ background:#14873f; }} .file-pdf {{ background:#e1192d; }} .file-name {{ font-weight:900; color:#101827; font-size:15px; }} .file-size {{ color:#4b5563; font-size:14px; margin-left:auto; font-weight:650; }}
+.file-ok {{ width:24px; height:24px; border-radius:50%; background:#118a38; color:white; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:950; margin-left:18px; }}
+.file-x {{ color:#111827; font-size:26px; font-weight:500; margin-left:22px; }}
+.change-file {{ display:flex; align-items:center; justify-content:center; gap:10px; border:1px solid #d8dde6; border-radius:12px; background:white; padding:14px 22px; font-size:16px; font-weight:850; color:#111827; box-shadow:0 6px 15px rgba(15,23,42,.06); height:54px; }}
+.upload-row {{ display:grid; grid-template-columns:1fr 155px; gap:18px; align-items:center; }}
+.stFileUploader {{ margin-top:-3px; }}
+div[data-testid="stFileUploaderDropzone"] {{ background:#f3f5f8 !important; border:1px solid #e2e6ec !important; border-radius:12px !important; min-height:54px !important; padding:7px 10px !important; }}
+div[data-testid="stFileUploaderDropzone"] button {{ background:#ffffff !important; color:#0A0A0A !important; border:1px solid #d5dbe5 !important; border-radius:10px !important; font-weight:900 !important; }}
+div[data-testid="stFileUploaderDropzone"] svg {{ color:#FFD400 !important; fill:#FFD400 !important; }} div[data-testid="stFileUploaderDropzone"] small {{ color:#4b5563 !important; font-weight:650 !important; }}
+.stButton > button {{ background:linear-gradient(180deg,#FFD400 0%,#f4bc00 100%) !important; color:#0A0A0A !important; border:1px solid #d6aa00 !important; border-radius:14px !important; font-weight:950 !important; min-height:54px !important; box-shadow:0 8px 18px rgba(255,212,0,.28) !important; }}
+.stButton > button:before {{ content:'▶'; margin-right:12px; font-size:17px; }}
+.stDownloadButton > button {{ background:linear-gradient(180deg,#FFD400 0%,#f4bc00 100%) !important; color:#0A0A0A !important; border:1px solid #d6aa00 !important; border-radius:14px !important; font-weight:950 !important; min-height:64px !important; font-size:20px !important; box-shadow:0 10px 24px rgba(255,212,0,.30) !important; }}
+.stDownloadButton > button:before {{ content:'⬇'; margin-right:14px; font-size:28px; }}
+.kpi-card {{ background:white; border:1px solid #e5e7eb; border-radius:18px; min-height:125px; padding:22px 24px; display:flex; align-items:center; gap:24px; box-shadow:0 10px 26px rgba(15,23,42,.08); }}
+.kpi-icon {{ width:72px; height:72px; border-radius:50%; background:rgba(255,212,0,.22); display:flex; align-items:center; justify-content:center; color:#0A0A0A; }} .kpi-icon svg {{ width:42px; height:42px; stroke-width:2.4; }}
+.kpi-label {{ color:#111827; font-size:16px; font-weight:900; margin-bottom:5px; }} .kpi-value {{ color:#f0bb00; font-size:40px; line-height:1; font-weight:950; letter-spacing:-1.5px; }} .kpi-sub {{ color:#334155; font-size:14px; margin-top:8px; font-weight:650; }}
+.results-title {{ font-size:28px; font-weight:950; color:#111827; margin:20px 0 8px; }}
+.unmatched-pill {{ display:inline-flex; align-items:center; gap:10px; background:#FFD400; color:#0A0A0A; font-size:20px; font-weight:950; padding:13px 22px; border-radius:14px 14px 0 0; box-shadow:0 8px 18px rgba(15,23,42,.10); }}
+.table-wrap {{ background:#fff; border-radius:0 16px 16px 16px; border:1px solid #e2e6ec; overflow:hidden; box-shadow:0 12px 28px rgba(15,23,42,.09); max-height:430px; overflow-y:auto; }}
+.pas-table {{ width:100%; border-collapse:collapse; font-size:14px; color:#111827; }} .pas-table thead th {{ position:sticky; top:0; z-index:2; background:#FFD400; color:#0A0A0A; text-align:left; font-weight:950; padding:12px 14px; border-right:1px solid rgba(0,0,0,.12); white-space:nowrap; }}
+.pas-table tbody td {{ padding:11px 14px; border-top:1px solid #e5e7eb; border-right:1px solid #edf0f3; background:#fff; color:#111827; font-weight:650; vertical-align:top; }} .pas-table tbody tr:nth-child(even) td {{ background:#fafafa; }}
+.query-link {{ color:#0b72e7 !important; font-weight:850; text-decoration:none; }} .pdf-ico {{ color:#e1192d; margin-right:8px; font-size:16px; }} .table-note {{ color:#111827; font-size:14px; font-weight:700; margin-top:12px; }}
+.support-row {{ display:flex; align-items:center; gap:22px; margin:28px 0 8px; color:#111827; font-weight:800; font-size:15px; }} .support-row a {{ color:#006fe6 !important; font-weight:900; text-decoration:underline; }}
+.stAlert, .stInfo {{ color:#111827 !important; }} .stAlert * {{ color:#111827 !important; }} .pas-bottom-chase {{ display:none !important; }}
+</style>
+""", unsafe_allow_html=True)
 
-    .pas-hero {{
-        background: linear-gradient(135deg, {PAS_BLACK} 0%, #202020 70%, #7a6900 135%);
-        border-radius: 18px;
-        padding: 24px 28px;
-        margin-bottom: 18px;
-        box-shadow: 0 8px 25px rgba(0,0,0,0.12);
-    }}
-    .pas-title {{
-        color: white;
-        font-size: 32px;
-        font-weight: 900;
-        margin: 0;
-        letter-spacing: -0.03em;
-    }}
-    .pas-subtitle {{
-        color: {PAS_YELLOW};
-        font-size: 14px;
-        margin-top: 4px;
-        font-weight: 800;
-    }}
+SVG_DOC = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor'><path d='M7 3h7l4 4v14H7z'/><path d='M14 3v5h5'/><path d='M9 13h6M9 17h6'/></svg>"
+SVG_CHECK = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor'><circle cx='12' cy='12' r='9'/><path d='m7.5 12 3 3 6-7'/></svg>"
+SVG_WARN = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor'><path d='M12 3 2.5 20.5h19z'/><path d='M12 9v5M12 17h.01'/></svg>"
+SVG_CHART = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor'><path d='M4 19V5'/><path d='M4 19h16'/><path d='M7 16v-4M12 16V8M17 16v-7'/><path d='m7 10 4-4 3 3 5-6'/></svg>"
 
-    .kpi-card {{
-        background: white;
-        border-radius: 18px;
-        padding: 18px 20px;
-        border: 1px solid #e8e8e8;
-        box-shadow: 0 3px 12px rgba(0,0,0,0.05);
-        min-height: 112px;
-    }}
-    .kpi-label {{
-        color: #111;
-        font-size: 14px;
-        font-weight: 800;
-        margin-bottom: 8px;
-    }}
-    .kpi-value {{
-        color: {PAS_YELLOW};
-        font-size: 36px;
-        font-weight: 950;
-        line-height: 1.05;
-        text-shadow: 0 1px 0 #111;
-    }}
-    .kpi-sub {{
-        color: #222;
-        font-size: 13px;
-        margin-top: 6px;
-    }}
-
-    .stButton > button, .stDownloadButton > button {{
-        background: {PAS_YELLOW} !important;
-        color: {PAS_BLACK} !important;
-        border: 1px solid {PAS_BLACK} !important;
-        border-radius: 12px !important;
-        font-weight: 900 !important;
-    }}
-
-    /* Keep app helper text readable */
-    .stCaption, div[data-testid="stCaptionContainer"], .stMarkdown p, .stInfo {{
-        color: #0A0A0A !important;
-    }}
-
-    .pas-results-title {{
-        color: #0A0A0A;
-        font-size: 26px;
-        font-weight: 950;
-        margin: 22px 0 8px 0;
-    }}
-    .pas-unmatched-pill {{
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        background: {PAS_YELLOW};
-        color: {PAS_BLACK};
-        border: 1px solid #111;
-        border-radius: 14px 14px 0 0;
-        padding: 11px 18px;
-        font-weight: 950;
-        box-shadow: 0 3px 10px rgba(0,0,0,0.08);
-        margin-top: 4px;
-    }}
-
-    .pas-table-wrap {{
-        background: white;
-        border: 1px solid #d9d9d9;
-        border-radius: 0 16px 16px 16px;
-        overflow: auto;
-        box-shadow: 0 4px 18px rgba(0,0,0,0.07);
-        margin-bottom: 18px;
-    }}
-    table.pas-table {{
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 13px;
-        color: #0A0A0A;
-        background: white;
-    }}
-    table.pas-table thead th {{
-        background: {PAS_YELLOW};
-        color: {PAS_BLACK};
-        font-weight: 950;
-        text-align: left;
-        padding: 11px 12px;
-        border: 1px solid #c7a900;
-        white-space: nowrap;
-    }}
-    table.pas-table tbody td {{
-        background: white;
-        color: #0A0A0A;
-        padding: 9px 12px;
-        border: 1px solid #e3e3e3;
-        vertical-align: top;
-    }}
-    table.pas-table tbody tr:nth-child(even) td {{
-        background: #fbfbfb;
-    }}
-    table.pas-table a {{
-        color: #006fd6 !important;
-        font-weight: 800;
-        text-decoration: none;
-    }}
-    table.pas-table a:hover {{
-        text-decoration: underline;
-    }}
-    .pas-note {{
-        color: #0A0A0A;
-        font-size: 13px;
-        margin: 8px 0 16px 0;
-    }}
-    .pas-support {{
-        color: #0A0A0A;
-        font-size: 14px;
-        margin: 16px 0;
-    }}
-    .pas-support a {{
-        color: #006fd6 !important;
-        font-weight: 800;
-    }}
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
-
-st.markdown(
-    """
-    <style>
-    /* Keep sidebar readable on black */
-    section[data-testid="stSidebar"] .stMarkdown p,
-    section[data-testid="stSidebar"] .stMarkdown li,
-    section[data-testid="stSidebar"] .stMarkdown h1,
-    section[data-testid="stSidebar"] .stMarkdown h2,
-    section[data-testid="stSidebar"] .stMarkdown h3,
-    section[data-testid="stSidebar"] .stMarkdown strong,
-    section[data-testid="stSidebar"] .stMarkdown span {
-        color: #ffffff !important;
-    }
-
-    /* Make upload icons visible on dark bars */
-    div[data-testid="stFileUploader"] svg,
-    div[data-testid="stFileUploader"] button svg,
-    div[data-testid="stFileUploader"] [data-testid="stIconMaterial"] {
-        color: #FFD400 !important;
-        fill: #FFD400 !important;
-        stroke: #FFD400 !important;
-    }
-    div[data-testid="stFileUploader"] section {
-        background: #24242d !important;
-        border: 1px solid #30303a !important;
-        border-radius: 12px !important;
-    }
-    div[data-testid="stFileUploader"] button {
-        color: white !important;
-        border-color: #454552 !important;
-        background: #111217 !important;
-    }
-
-    /* Results table: white body, yellow sticky header, 10-row scroll area */
-    .pas-table-wrap {
-        max-height: 510px !important;
-        overflow-y: auto !important;
-        overflow-x: auto !important;
-    }
-    .pas-table-wrap thead th {
-        position: sticky;
-        top: 0;
-        z-index: 2;
-    }
-    .pas-note, .pas-support, .pas-support * {
-        color: #0A0A0A !important;
-    }
-
-    /* Bottom chase animation: small, low, runs once */
-    .pas-bottom-chase-wrap {
-        position: fixed;
-        left: calc(18rem + 22px);
-        right: 42px;
-        bottom: 12px;
-        height: 58px;
-        pointer-events: none;
-        z-index: 1;
-        overflow: hidden;
-    }
-    .pas-bottom-ground {
-        position: absolute;
-        left: 0;
-        right: 0;
-        bottom: 6px;
-        border-bottom: 1px solid rgba(0,0,0,0.11);
-    }
-    .pas-chase-pack {
-        position: absolute;
-        bottom: 8px;
-        left: -150px;
-        width: 150px;
-        height: 48px;
-        animation: pas-chase-run 13s linear 1 forwards;
-    }
-    @keyframes pas-chase-run {
-        0% { transform: translateX(-120px); opacity: 0; }
-        8% { opacity: 1; }
-        88% { opacity: 1; }
-        100% { transform: translateX(calc(100vw - 90px)); opacity: 0; }
-    }
-    .pas-truck-mini {
-        position: absolute;
-        left: 0;
-        bottom: 5px;
-        width: 54px;
-        height: 30px;
-        filter: drop-shadow(0 1px 1px rgba(0,0,0,.22));
-    }
-    .pas-truck-bed {
-        position: absolute;
-        left: 0;
-        top: 5px;
-        width: 34px;
-        height: 19px;
-        background: #FFD400;
-        border: 3px solid #0A0A0A;
-        border-radius: 4px 2px 3px 5px;
-        transform: skewX(-10deg);
-    }
-    .pas-truck-logo {
-        position: absolute;
-        left: 7px;
-        top: 9px;
-        font-size: 9px;
-        font-weight: 950;
-        color: #0A0A0A;
-        line-height: 1;
-        z-index: 3;
-    }
-    .pas-truck-cab {
-        position: absolute;
-        left: 30px;
-        top: 7px;
-        width: 19px;
-        height: 18px;
-        background: #FFD400;
-        border: 3px solid #0A0A0A;
-        border-radius: 3px 5px 3px 2px;
-        z-index: 2;
-    }
-    .pas-truck-window {
-        position: absolute;
-        left: 34px;
-        top: 10px;
-        width: 7px;
-        height: 7px;
-        background: #a8d8e8;
-        border: 2px solid #0A0A0A;
-        border-radius: 2px;
-        z-index: 4;
-    }
-    .pas-truck-nose {
-        position: absolute;
-        left: 47px;
-        top: 17px;
-        width: 8px;
-        height: 8px;
-        background: #FFD400;
-        border: 3px solid #0A0A0A;
-        border-left: none;
-        border-radius: 0 3px 3px 0;
-    }
-    .pas-wheel {
-        position: absolute;
-        bottom: 0;
-        width: 9px;
-        height: 9px;
-        background: #0A0A0A;
-        border: 2px solid #222;
-        border-radius: 50%;
-        animation: pas-wheel-spin .32s linear infinite;
-        z-index: 5;
-    }
-    .pas-wheel::after {
-        content: "";
-        position: absolute;
-        inset: 2px;
-        background: #FFD400;
-        border-radius: 50%;
-    }
-    .pas-wheel.back { left: 13px; }
-    .pas-wheel.front { left: 41px; }
-    @keyframes pas-wheel-spin { to { transform: rotate(360deg); } }
-
-    .pas-speed-lines { position: absolute; left: -30px; top: 17px; width: 24px; height: 18px; }
-    .pas-speed-lines span { display:block; height:2px; background:#b9b9b9; margin:4px 0; border-radius:2px; animation: pas-flicker .55s linear infinite; }
-    .pas-speed-lines span:nth-child(2) { width: 16px; margin-left: 8px; }
-    .pas-speed-lines span:nth-child(3) { width: 11px; margin-left: 13px; }
-    @keyframes pas-flicker { 50% { opacity:.25; transform: translateX(-5px); } }
-
-    .pas-dust { position:absolute; left:-5px; bottom:0; width:34px; height:14px; opacity:.75; }
-    .pas-dust span { position:absolute; bottom:0; background:#dac6a9; border-radius:50%; animation: pas-dust 1s linear infinite; }
-    .pas-dust span:nth-child(1) { width:12px; height:6px; left:0; }
-    .pas-dust span:nth-child(2) { width:16px; height:7px; left:10px; animation-delay:.2s; }
-    .pas-dust span:nth-child(3) { width:11px; height:5px; left:23px; animation-delay:.4s; }
-    @keyframes pas-dust { 50% { transform: translateX(-8px) scale(1.15); opacity:.4; } }
-
-    .pas-stickman {
-        position: absolute;
-        left: 92px;
-        bottom: 5px;
-        width: 28px;
-        height: 34px;
-        animation: pas-runner-bob .35s ease-in-out infinite alternate;
-    }
-    @keyframes pas-runner-bob { from { transform: translateY(1px); } to { transform: translateY(-2px); } }
-    .pas-stick-head {
-        position:absolute;
-        top:0;
-        left:11px;
-        width:8px;
-        height:8px;
-        border:2px solid #111;
-        border-radius:50%;
-        background:white;
-    }
-    .pas-stick-body { position:absolute; left:15px; top:9px; width:2px; height:13px; background:#111; transform: rotate(12deg); transform-origin:top; }
-    .pas-stick-arm-a, .pas-stick-arm-b, .pas-stick-leg-a, .pas-stick-leg-b { position:absolute; width:2px; height:12px; background:#111; transform-origin:top; border-radius:2px; }
-    .pas-stick-arm-a { left:15px; top:11px; transform: rotate(58deg); animation: pas-arm-a .35s linear infinite alternate; }
-    .pas-stick-arm-b { left:15px; top:11px; transform: rotate(-50deg); animation: pas-arm-b .35s linear infinite alternate; }
-    .pas-stick-leg-a { left:16px; top:21px; height:14px; transform: rotate(48deg); animation: pas-leg-a .35s linear infinite alternate; }
-    .pas-stick-leg-b { left:16px; top:21px; height:14px; transform: rotate(-42deg); animation: pas-leg-b .35s linear infinite alternate; }
-    @keyframes pas-arm-a { to { transform: rotate(-45deg); } }
-    @keyframes pas-arm-b { to { transform: rotate(55deg); } }
-    @keyframes pas-leg-a { to { transform: rotate(-45deg); } }
-    @keyframes pas-leg-b { to { transform: rotate(48deg); } }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
-
-# --- PAS V2 polished UI overrides ---
-st.markdown(
-    f"""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800;900&display=swap');
-    html, body, [class*="css"] {{ font-family: 'Inter', Arial, sans-serif !important; }}
-    .stApp {{ background: #f7f8fa !important; color: #0A0A0A !important; }}
-    header[data-testid="stHeader"] {{ background: #11141a !important; }}
-    .block-container {{ max-width: 1520px !important; padding-top: 0.85rem !important; padding-left: 2.2rem !important; padding-right: 2.2rem !important; }}
-
-    section[data-testid="stSidebar"] {{ background: linear-gradient(180deg, #050607 0%, #111820 100%) !important; }}
-    section[data-testid="stSidebar"] > div {{ padding-top: 1.15rem !important; }}
-    section[data-testid="stSidebar"] img {{ border-radius: 16px !important; box-shadow: 0 10px 26px rgba(0,0,0,.45); margin-top: 0.05rem !important; }}
-    .pas-sidebar-title {{ color:#fff; font-size:20px; font-weight:950; text-align:center; line-height:1.1; margin:22px 0 8px; }}
-    .pas-sidebar-line {{ width:64px; height:4px; background:{PAS_YELLOW}; border-radius:6px; margin:0 auto 22px; }}
-    .pas-sidebar-copy {{ color:#fff; font-size:15px; font-weight:650; line-height:1.45; margin-bottom:28px; }}
-    .pas-sidebar-rule {{ height:1px; background:#363b42; margin:18px 0 22px; }}
-    .pas-side-heading {{ color:{PAS_YELLOW}; font-size:18px; font-weight:950; margin-bottom:14px; }}
-    .pas-side-item {{ display:flex; gap:12px; align-items:flex-start; color:#fff; font-size:15px; font-weight:750; line-height:1.35; margin:16px 0; }}
-    .pas-side-ico {{ color:{PAS_YELLOW}; width:23px; min-width:23px; height:23px; display:inline-flex; align-items:center; justify-content:center; }}
-    .pas-side-foot {{ color:#fff; font-size:12px; font-weight:700; margin-top:30px; opacity:.95; }}
-
-    .pas-hero {{
-        background: linear-gradient(105deg, #090b0f 0%, #14171d 58%, #6d5f00 100%) !important;
-        border-radius: 18px !important;
-        padding: 17px 22px !important;
-        margin: 0 0 18px !important;
-        box-shadow: 0 10px 28px rgba(0,0,0,.18) !important;
-        display:flex; align-items:center; gap:14px;
-        min-height: 42px;
-    }}
-    .pas-hero-mini-logo {{ width:38px; height:38px; border-radius:8px; background:{PAS_YELLOW}; color:#000; display:flex; align-items:center; justify-content:center; font-weight:950; font-size:17px; letter-spacing:-1px; }}
-    .pas-hero-text {{ color:#fff; font-size:18px; font-weight:950; }}
-    .pas-hero-dot {{ color:#fff; opacity:.9; margin:0 8px; }}
-    .pas-hero-version {{ color:{PAS_YELLOW}; font-weight:950; }}
-
-    div[data-testid="stFileUploader"] {{ background:#fff !important; border:1px solid #e3e6ea !important; border-radius:18px !important; padding:16px 18px 14px !important; box-shadow:0 6px 20px rgba(0,0,0,.06) !important; }}
-    div[data-testid="stFileUploader"] > label {{ color:#111 !important; font-size:16px !important; font-weight:950 !important; margin-bottom:12px !important; }}
-    div[data-testid="stFileUploader"] section {{ background:#f4f5f7 !important; border:1px solid #e1e4e8 !important; border-radius:12px !important; min-height:54px !important; }}
-    div[data-testid="stFileUploader"] button {{ background:#fff !important; color:#111 !important; border:1px solid #d7dbe0 !important; border-radius:10px !important; font-weight:850 !important; box-shadow:0 2px 8px rgba(0,0,0,.05) !important; }}
-    div[data-testid="stFileUploader"] small {{ color:#313946 !important; font-weight:700 !important; }}
-    div[data-testid="stFileUploader"] svg {{ color:#111 !important; fill:#111 !important; stroke:#111 !important; }}
-    div[data-testid="stFileUploader"] [data-testid="stFileUploaderFile"] {{ background:#f0f2f5 !important; color:#111 !important; border-radius:10px !important; }}
-    div[data-testid="stFileUploader"] [data-testid="stFileUploaderFile"] * {{ color:#111 !important; }}
-    div[data-testid="stFileUploader"] [data-testid="stFileUploaderFile"] svg {{ color:#0a8f36 !important; fill:#0a8f36 !important; stroke:#0a8f36 !important; }}
-
-    .stButton > button {{ min-height:52px !important; font-size:16px !important; border:none !important; box-shadow:0 8px 18px rgba(255,212,0,.28) !important; }}
-    .stButton > button::before {{ content:'▶'; margin-right:12px; font-size:17px; }}
-    .stDownloadButton > button {{ min-height:58px !important; font-size:20px !important; border:none !important; box-shadow:0 10px 20px rgba(255,212,0,.28) !important; }}
-    .stDownloadButton > button::before {{ content:'⬇'; margin-right:12px; font-size:24px; }}
-
-    .kpi-card {{ display:flex; align-items:center; gap:20px; background:white !important; border-radius:18px !important; padding:22px 24px !important; box-shadow:0 7px 22px rgba(0,0,0,.075) !important; border:1px solid #e7e9ed !important; min-height:116px !important; }}
-    .kpi-icon {{ width:66px; height:66px; min-width:66px; border-radius:50%; background:#fff3ba; display:flex; align-items:center; justify-content:center; color:#111; }}
-    .kpi-icon svg {{ width:38px; height:38px; stroke-width:2.2; }}
-    .kpi-label {{ color:#111 !important; font-size:15px !important; font-weight:900 !important; margin-bottom:3px !important; }}
-    .kpi-value {{ color:{PAS_YELLOW} !important; font-size:40px !important; font-weight:950 !important; line-height:1 !important; text-shadow:none !important; }}
-    .kpi-sub {{ color:#27303a !important; font-size:13px !important; font-weight:650 !important; }}
-
-    .pas-results-title {{ font-size:25px !important; font-weight:950 !important; color:#0A0A0A !important; margin:24px 0 8px !important; }}
-    .pas-unmatched-pill {{ display:inline-flex; align-items:center; gap:10px; background:{PAS_YELLOW}; color:#000; border:none; border-radius:13px 13px 0 0; padding:13px 19px; font-size:18px; font-weight:950; box-shadow:0 6px 18px rgba(0,0,0,.09); }}
-    .pas-table-wrap {{ background:white; border:1px solid #e1e4e8; border-radius:0 16px 16px 16px; overflow:auto; box-shadow:0 9px 26px rgba(0,0,0,.09); max-height:456px !important; }}
-    table.pas-table {{ width:100%; border-collapse:separate; border-spacing:0; font-size:14px; color:#111; background:white; }}
-    table.pas-table thead th {{ position:sticky; top:0; z-index:2; background:{PAS_YELLOW}; color:#000; font-weight:950; padding:13px 15px; border-right:1px solid rgba(0,0,0,.15); white-space:nowrap; }}
-    table.pas-table tbody td {{ background:#fff; color:#111; padding:11px 15px; border-right:1px solid #e1e5ea; border-bottom:1px solid #e1e5ea; font-weight:650; vertical-align:middle; }}
-    table.pas-table tbody tr:nth-child(even) td {{ background:#fbfcfd; }}
-    table.pas-table a {{ color:#006fe6 !important; font-weight:850; text-decoration:none; }}
-    table.pas-table a:hover {{ text-decoration:underline; }}
-    .pas-pdf-icon {{ display:inline-block; background:#e91f2f; color:#fff; font-size:10px; font-weight:950; border-radius:3px; padding:2px 4px; margin-right:8px; }}
-    .pas-mail-icon {{ color:#006fe6; font-weight:950; margin-right:6px; }}
-    .pas-note {{ color:#111 !important; font-size:14px !important; font-weight:650 !important; margin:12px 0 22px !important; }}
-    .pas-support {{ color:#111 !important; font-size:15px !important; font-weight:750 !important; margin:22px 0 !important; }}
-    .pas-support a {{ color:#006fe6 !important; font-weight:900 !important; margin-left:18px; }}
-    .pas-support a::before {{ content:'✉ '; color:#006fe6; }}
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+def svg_icon(svg: str) -> str:
+    return svg
 
 with st.sidebar:
     st.image("pas_logo.png", use_column_width=True)
-    st.markdown(
-        """
-        <div class="pas-sidebar-title">PAS Plant<br>Invoice Matching</div>
-        <div class="pas-sidebar-line"></div>
-        <div class="pas-sidebar-copy">Upload the Plant workbook and invoice PDFs/ZIP, then export a clean reconciliation workbook.</div>
-        <div class="pas-sidebar-rule"></div>
-        <div class="pas-side-heading">Instructions</div>
-        <div class="pas-side-item"><span class="pas-side-ico">☁</span><span>Upload Hire Order<br>Spreadsheet</span></div>
-        <div class="pas-side-item"><span class="pas-side-ico">▣</span><span>Upload ZIP of all invoices<br>to be checked</span></div>
-        <div class="pas-side-item"><span class="pas-side-ico">▶</span><span>Run Reconciliation</span></div>
-        <div class="pas-side-item"><span class="pas-side-ico">↓</span><span>Download Reconciliation<br>Spreadsheet</span></div>
-        <div class="pas-side-item"><span class="pas-side-ico">⌕</span><span>Smoke Crack</span></div>
-        <div class="pas-sidebar-rule"></div>
-        <div class="pas-side-foot">PAS NW Ltd · v1.0 Prototype Build</div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-st.markdown(
-    """
-    <div class="pas-hero">
-      <div class="pas-hero-mini-logo">PAS</div>
-      <div class="pas-hero-text">PAS NW Ltd <span class="pas-hero-dot">•</span> <span class="pas-hero-version">v1.0 Prototype Build</span></div>
+    st.markdown("""
+    <div class='pas-side-title'>PAS Plant<br>Invoice Matching</div>
+    <div class='pas-side-rule'></div>
+    <div class='pas-side-copy'>Upload the Plant workbook and invoice PDFs/ZIP, then export a clean reconciliation workbook.</div>
+    <div class='pas-side-section'>
+      <div class='pas-side-heading'>Instructions</div>
+      <div class='pas-side-step'><div class='pas-side-ico'>☁</div><div>Upload Hire Order<br>Spreadsheet</div></div>
+      <div class='pas-side-step'><div class='pas-side-ico'>▣</div><div>Upload ZIP of all invoices<br>to be checked</div></div>
+      <div class='pas-side-step'><div class='pas-side-ico'>▶</div><div>Run Reconciliation</div></div>
+      <div class='pas-side-step'><div class='pas-side-ico'>↓</div><div>Download Reconciliation<br>Spreadsheet</div></div>
+      <div class='pas-side-step'><div class='pas-side-ico'>⌕</div><div>Smoke Crack</div></div>
     </div>
-    """,
-    unsafe_allow_html=True,
-)
+    <div class='pas-side-foot'>PAS NW Ltd • v1.0 Prototype Build</div>
+    """, unsafe_allow_html=True)
 
-
-
-def render_bottom_chase():
-    """Small non-intrusive PAS dump truck chase animation pinned to the bottom of the white content area."""
-    st.markdown(
-        """
-        <div class="pas-bottom-chase-wrap" aria-hidden="true">
-            <div class="pas-bottom-ground"></div>
-            <div class="pas-chase-pack">
-                <div class="pas-speed-lines"><span></span><span></span><span></span></div>
-                <div class="pas-dust"><span></span><span></span><span></span></div>
-                <div class="pas-truck-mini">
-                    <div class="pas-truck-bed"></div>
-                    <div class="pas-truck-logo">PAS</div>
-                    <div class="pas-truck-cab"></div>
-                    <div class="pas-truck-window"></div>
-                    <div class="pas-truck-nose"></div>
-                    <div class="pas-wheel back"></div>
-                    <div class="pas-wheel front"></div>
-                </div>
-                <div class="pas-stickman">
-                    <div class="pas-stick-head"></div>
-                    <div class="pas-stick-body"></div>
-                    <div class="pas-stick-arm-a"></div>
-                    <div class="pas-stick-arm-b"></div>
-                    <div class="pas-stick-leg-a"></div>
-                    <div class="pas-stick-leg-b"></div>
-                </div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
+st.markdown("""
+<div class='pas-topbar'>
+  <div class='pas-mini-logo'>PAS</div>
+  <div class='pas-top-title'>PAS NW Ltd</div>
+  <div class='pas-top-dot'>•</div>
+  <div class='pas-top-ver'>v1.0 Prototype Build</div>
+</div>
+""", unsafe_allow_html=True)
 BAD_SUPPLIER_PATTERNS = [
     "invoice", "invoice no", "invoice number", "vat", "vat number", "account", "account no",
     "customer", "customer ref", "your ref", "order no", "page", "date", "due date",
@@ -1496,121 +1063,6 @@ def clean_output_df(df: pd.DataFrame) -> pd.DataFrame:
     return out[OUTPUT_COLUMNS]
 
 
-
-
-def make_query_email_link(row) -> str:
-    """Create a mailto link for querying an unmatched invoice.
-
-    This opens the user's default mail client, CCs invoice@pasnw.co.uk,
-    and prepares a supplier query email. The To field is intentionally left
-    blank for now because supplier emails are not yet stored in the Plant sheet.
-    """
-    invoice_no = clean_cell(row.get("Invoice Number", "Unknown")) or "Unknown"
-    supplier = clean_cell(row.get("Supplier", "")) or "the supplier"
-    order_ref = clean_cell(row.get("Order Reference", "")) or "Not found"
-    reason = clean_cell(row.get("Unmatched Reason", "")) or "Invoice did not match the Plant order record"
-    pdf_file = clean_cell(row.get("PDF File", ""))
-
-    subject = f"Invoice Query: {invoice_no}"
-    body = (
-        "Hi,\n\n"
-        f"We are querying invoice {invoice_no}.\n\n"
-        "Our invoice matching system has flagged the following issue:\n\n"
-        f"Supplier: {supplier}\n"
-        f"Order reference: {order_ref}\n"
-        f"Reason: {reason}\n"
-    )
-    if pdf_file:
-        body += f"PDF file: {pdf_file}\n"
-    body += (
-        "\nPlease can you review and confirm whether this invoice is correct, "
-        "or send a revised invoice if required.\n\n"
-        "Kind regards,\n\n"
-        "PAS Plant Team"
-    )
-
-    return f"mailto:?cc=invoice@pasnw.co.uk&subject={quote(subject)}&body={quote(body)}"
-
-
-def add_query_email_column(df: pd.DataFrame) -> pd.DataFrame:
-    """Add a clickable Query Supplier mailto link for the app display only."""
-    out = clean_output_df(df).copy()
-    if out.empty:
-        out["Query Supplier"] = ""
-        return out
-    out["Query Supplier"] = out.apply(make_query_email_link, axis=1)
-    cols = list(out.columns)
-    # Put action link first so it is obvious to users.
-    cols = ["Query Supplier"] + [c for c in cols if c != "Query Supplier"]
-    return out[cols]
-
-
-
-
-def render_unmatched_table(df: pd.DataFrame):
-    """Render unmatched invoices as a polished white HTML table with PAS yellow headers."""
-    display_df = add_query_email_column(df)
-    if display_df.empty:
-        st.success("No unmatched invoices. Nice one.")
-        return
-
-    cols = [
-        "Query Supplier",
-        "PDF File",
-        "Invoice Number",
-        "Supplier",
-        "Order Reference",
-        "Invoice Type",
-        "Plant Status",
-        "Agreed Rate / Value",
-        "Unmatched Reason",
-    ]
-    for col in cols:
-        if col not in display_df.columns:
-            display_df[col] = ""
-    display_df = display_df[cols]
-
-    label_map = {
-        "Query Supplier": "✉ Query Supplier",
-        "PDF File": "▣ PDF File",
-        "Invoice Number": "# Invoice Number",
-        "Supplier": "♟ Supplier",
-        "Order Reference": "◇ Order Reference",
-        "Invoice Type": "▣ Invoice Type",
-        "Plant Status": "⚙ Plant Status",
-        "Agreed Rate / Value": "£ Agreed Rate / Value",
-        "Unmatched Reason": "⚠ Unmatched Reason",
-    }
-    header_html = "".join(f"<th>{escape(str(label_map.get(col, col)))}</th>" for col in cols)
-    body_rows = []
-    for _, row in display_df.iterrows():
-        cells = []
-        for col in cols:
-            value = clean_cell(row.get(col, ""))
-            if col == "Query Supplier" and value:
-                cells.append(f'<td><a href="{escape(value, quote=True)}"><span class="pas-mail-icon">✉</span>Query Supplier</a></td>')
-            elif col == "PDF File" and value:
-                cells.append(f'<td><span class="pas-pdf-icon">PDF</span>{escape(value)}</td>')
-            else:
-                cells.append(f"<td>{escape(value)}</td>")
-        body_rows.append("<tr>" + "".join(cells) + "</tr>")
-
-    table_html = f"""
-    <div class="pas-unmatched-pill">⚠ Unmatched Invoices</div>
-    <div class="pas-table-wrap">
-      <table class="pas-table">
-        <thead><tr>{header_html}</tr></thead>
-        <tbody>{''.join(body_rows)}</tbody>
-      </table>
-    </div>
-    <div class="pas-note">
-      Showing 10 of {len(display_df)} unmatched invoice(s). Query Supplier opens a pre-filled email draft with invoice@pasnw.co.uk CC'd.
-      Mailto links cannot attach PDFs automatically because browsers block file attachments for security.
-    </div>
-    """
-    st.markdown(table_html, unsafe_allow_html=True)
-
-
 def make_excel(summary_df, matched_df, unmatched_df, all_df) -> bytes:
     output = io.BytesIO()
     rules_df = pd.DataFrame({
@@ -1640,11 +1092,49 @@ def make_excel(summary_df, matched_df, unmatched_df, all_df) -> bytes:
     return output.getvalue()
 
 
-up_col1, up_col2 = st.columns(2)
-with up_col1:
-    plant_file = st.file_uploader("Upload Material Spreadsheet", type=["xlsx", "xls"])
-with up_col2:
-    invoice_files = st.file_uploader("Upload Invoice PDFs or ZIP", type=["pdf", "zip"], accept_multiple_files=True)
+
+def short_name(uploaded, fallback: str) -> str:
+    if uploaded is None:
+        return fallback
+    name = getattr(uploaded, "name", fallback)
+    return name if len(name) <= 28 else name[:18] + "..." + name[-8:]
+
+def upload_card(title: str, uploaded, kind: str):
+    icon_class = "file-xlsx" if kind == "xlsx" else "file-pdf"
+    icon_text = "XLS" if kind == "xlsx" else "PDF"
+    file_name = short_name(uploaded, "No file selected")
+    size_text = "" if uploaded is None else f"{getattr(uploaded, 'size', 0) / (1024*1024):.1f} MB"
+    ok = '<div class="file-ok">✓</div>' if uploaded is not None else ''
+    x = '<div class="file-x">×</div>' if uploaded is not None else ''
+    st.markdown(f"""
+    <div class="upload-shell"><div class="upload-title">{title}</div><div class="upload-row"><div class="uploaded-card">
+    <div class="file-icon {icon_class}">{icon_text}</div><div class="file-name">{file_name}</div><div class="file-size">{size_text}</div>{ok}{x}</div><div class="change-file">▱ Change file</div></div></div>
+    """, unsafe_allow_html=True)
+
+def make_mailto(row: pd.Series) -> str:
+    supplier = clean_cell(row.get("Supplier", "Supplier")); inv_no = clean_cell(row.get("Invoice Number", "Unknown")); order_ref = clean_cell(row.get("Order Reference", "")); reason = clean_cell(row.get("Unmatched Reason", "")); pdf_file = clean_cell(row.get("PDF File", ""))
+    subject = f"Invoice Query: {inv_no}"
+    body = f"Hi,\n\nWe are querying invoice {inv_no}.\n\nSupplier: {supplier}\nOrder reference: {order_ref}\nPDF file: {pdf_file}\nQuery reason: {reason}\n\nPlease can you review and confirm, or issue a corrected invoice if required.\n\nKind regards,\nPAS Plant Team"
+    return "mailto:?" + urllib.parse.urlencode({"cc": "invoice@pasnw.co.uk", "subject": subject, "body": body})
+
+def html_table(df: pd.DataFrame) -> str:
+    display_df = clean_output_df(df).head(10).copy()
+    headers = ["Query Supplier", "PDF File", "Invoice Number", "Supplier", "Order Reference", "Invoice Type", "Plant Status", "Agreed Rate / Value", "Unmatched Reason"]
+    rows = []
+    for _, row in display_df.iterrows():
+        link = make_mailto(row)
+        cells = [f'<a class="query-link" href="{link}">✉ Query Supplier</a>', f'<span class="pdf-ico">▣</span>{clean_cell(row.get("PDF File", ""))}', clean_cell(row.get("Invoice Number", "")), clean_cell(row.get("Supplier", "")), clean_cell(row.get("Order Reference", "")), clean_cell(row.get("Invoice Type", "")), clean_cell(row.get("Plant Status", "")), clean_cell(row.get("Agreed Rate / Value", "")), clean_cell(row.get("Unmatched Reason", ""))]
+        rows.append("<tr>" + "".join(f"<td>{c}</td>" for c in cells) + "</tr>")
+    return "<div class='unmatched-pill'>⚠ Unmatched Invoices</div><div class='table-wrap'><table class='pas-table'><thead><tr>" + "".join(f"<th>{h}</th>" for h in headers) + "</tr></thead><tbody>" + "".join(rows) + "</tbody></table></div>"
+
+col_a, col_b = st.columns(2, gap="large")
+with col_a:
+    plant_file = st.file_uploader("Upload Material Spreadsheet", type=["xlsx", "xls"], label_visibility="collapsed")
+    upload_card("Upload Material Spreadsheet", plant_file, "xlsx")
+with col_b:
+    invoice_files = st.file_uploader("Upload Invoice PDFs or ZIP", type=["pdf", "zip"], accept_multiple_files=True, label_visibility="collapsed")
+    shown_invoice = invoice_files[0] if invoice_files else None
+    upload_card("Upload Invoice PDFs or ZIP", shown_invoice, "pdf")
 
 run = st.button("Run reconciliation", use_container_width=True)
 
@@ -1665,46 +1155,21 @@ if run:
                 st.stop()
             matched_df = all_df[all_df["Match Status"] == "Matched"].copy()
             unmatched_df = all_df[all_df["Match Status"] == "Unmatched"].copy()
-
-        total = len(all_df)
-        matched = len(matched_df)
-        unmatched = len(unmatched_df)
-        match_pct = round((matched / total) * 100, 1) if total else 0.0
-
-        summary_df = pd.DataFrame({
-            "Metric": ["Total invoices", "Matched", "Unmatched", "Match percentage", "Run date/time"],
-            "Value": [total, matched, unmatched, f"{match_pct}%", datetime.now().strftime("%d/%m/%Y %H:%M")],
-        })
-
-        c1, c2, c3, c4 = st.columns(4)
-        with c1:
-            st.markdown(f'<div class="kpi-card"><div class="kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v5h5"/><path d="M4 7h3v14h11"/></svg></div><div><div class="kpi-label">Total invoices</div><div class="kpi-value">{total}</div><div class="kpi-sub">Detected records</div></div></div>', unsafe_allow_html=True)
-        with c2:
-            st.markdown(f'<div class="kpi-card"><div class="kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M7.5 12.5l3 3 6-7"/></svg></div><div><div class="kpi-label">Matched</div><div class="kpi-value">{matched}</div><div class="kpi-sub">Approved candidates</div></div></div>', unsafe_allow_html=True)
-        with c3:
-            st.markdown(f'<div class="kpi-card"><div class="kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3l10 18H2z"/><path d="M12 9v5"/><path d="M12 17h.01"/></svg></div><div><div class="kpi-label">Unmatched</div><div class="kpi-value">{unmatched}</div><div class="kpi-sub">Need review</div></div></div>', unsafe_allow_html=True)
-        with c4:
-            st.markdown(f'<div class="kpi-card"><div class="kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M7 15l4-4 3 3 5-7"/><path d="M17 7h2v2"/></svg></div><div><div class="kpi-label">Match %</div><div class="kpi-value">{match_pct}%</div><div class="kpi-sub">Core KPI</div></div></div>', unsafe_allow_html=True)
-
-        st.markdown('<div class="pas-results-title">Results</div>', unsafe_allow_html=True)
-        render_unmatched_table(unmatched_df)
-        st.markdown(
-            '<div class="pas-support">For queries or support contact: '
-            '<a href="mailto:invoice@pasnw.co.uk">invoice@pasnw.co.uk</a>'
-            '&nbsp;&nbsp;&nbsp;'
-            '<a href="mailto:plant@pasnw.co.uk">plant@pasnw.co.uk</a>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-
+        total = len(all_df); matched = len(matched_df); unmatched = len(unmatched_df); match_pct = round((matched / total) * 100, 1) if total else 0.0
+        summary_df = pd.DataFrame({"Metric": ["Total invoices", "Matched", "Unmatched", "Match percentage", "Run date/time"], "Value": [total, matched, unmatched, f"{match_pct}%", datetime.now().strftime("%d/%m/%Y %H:%M")]})
+        c1, c2, c3, c4 = st.columns(4, gap="large")
+        with c1: st.markdown(f'<div class="kpi-card"><div class="kpi-icon">{SVG_DOC}</div><div><div class="kpi-label">Total invoices</div><div class="kpi-value">{total}</div><div class="kpi-sub">Detected records</div></div></div>', unsafe_allow_html=True)
+        with c2: st.markdown(f'<div class="kpi-card"><div class="kpi-icon">{SVG_CHECK}</div><div><div class="kpi-label">Matched</div><div class="kpi-value">{matched}</div><div class="kpi-sub">Approved candidates</div></div></div>', unsafe_allow_html=True)
+        with c3: st.markdown(f'<div class="kpi-card"><div class="kpi-icon">{SVG_WARN}</div><div><div class="kpi-label">Unmatched</div><div class="kpi-value">{unmatched}</div><div class="kpi-sub">Need review</div></div></div>', unsafe_allow_html=True)
+        with c4: st.markdown(f'<div class="kpi-card"><div class="kpi-icon">{SVG_CHART}</div><div><div class="kpi-label">Match %</div><div class="kpi-value">{match_pct}%</div><div class="kpi-sub">Core KPI</div></div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="results-title">Results</div>', unsafe_allow_html=True)
+        st.markdown(html_table(unmatched_df), unsafe_allow_html=True)
+        st.markdown(f'<div class="table-note">Showing {min(10, len(unmatched_df))} of {len(unmatched_df)} unmatched invoice(s). Query Supplier opens a pre-filled email draft with invoice@pasnw.co.uk CC\'d.</div>', unsafe_allow_html=True)
         excel_bytes = make_excel(summary_df, matched_df, unmatched_df, all_df)
-        st.download_button(
-            "Download Excel reconciliation",
-            data=excel_bytes,
-            file_name=f"PAS_Reconciliation_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
-        )
+        left, right = st.columns([1.25, 1])
+        with left: st.markdown('<div class="support-row">For queries or support contact: <a href="mailto:invoice@pasnw.co.uk">✉ invoice@pasnw.co.uk</a> <a href="mailto:plant@pasnw.co.uk">✉ plant@pasnw.co.uk</a></div>', unsafe_allow_html=True)
+        with right:
+            st.download_button("Download Excel reconciliation", data=excel_bytes, file_name=f"PAS_Reconciliation_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
     except Exception as e:
         st.error(f"Something went wrong: {e}")
         st.exception(e)
