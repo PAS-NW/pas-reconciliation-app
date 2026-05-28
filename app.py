@@ -460,6 +460,33 @@ st.markdown(
     .pas-note, .pas-support, .pas-support * {{ color:#0A0A0A !important; }}
     .pas-support {{ margin-top:22px !important; font-size:15px !important; }}
     .pas-support a {{ color:#006bd6 !important; font-weight:900 !important; margin-left:12px; }}
+
+    /* --- uploader chip cleanup: hide Streamlit's ugly uploaded-file pill and use our own card --- */
+    div[data-testid="stFileUploader"] [data-testid="stFileUploaderFile"] { display: none !important; }
+    div[data-testid="stFileUploaderDropzone"] { background: transparent !important; border: 0 !important; padding: 0 !important; min-height: 0 !important; }
+    div[data-testid="stFileUploaderDropzoneInstructions"] { display: none !important; }
+    div[data-testid="stFileUploader"] section { background: transparent !important; border: 0 !important; min-height: 0 !important; padding: 0 !important; }
+    div[data-testid="stFileUploader"] button {
+        background: #ffffff !important;
+        color: #0A0A0A !important;
+        border: 1px solid #d7dce3 !important;
+        border-radius: 10px !important;
+        font-weight: 900 !important;
+        min-height: 44px !important;
+        box-shadow: 0 2px 8px rgba(0,0,0,.06) !important;
+    }
+    .pas-file-card {
+        display:flex; align-items:center; gap:14px;
+        background:#f4f6f8; border:1px solid #dfe4ea; border-radius:12px;
+        padding:11px 14px; min-height:54px; margin: 4px 0 12px;
+    }
+    .pas-file-icon { width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:950; font-size:11px; box-shadow:0 2px 8px rgba(0,0,0,.12); flex:none; }
+    .pas-file-icon.excel { background:#118a3b; }
+    .pas-file-icon.pdf { background:#df1f2d; }
+    .pas-file-main { flex:1; min-width:0; }
+    .pas-file-name { color:#0A0A0A; font-weight:950; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .pas-file-size { color:#4b5563; font-weight:650; font-size:13px; margin-top:2px; }
+    .pas-file-check { width:24px; height:24px; border-radius:50%; background:#108a37; color:white; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:950; flex:none; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -1585,6 +1612,48 @@ def render_unmatched_table(df: pd.DataFrame):
     st.markdown(table_html, unsafe_allow_html=True)
 
 
+
+
+def _file_size_label(uploaded_file):
+    try:
+        size = uploaded_file.size
+    except Exception:
+        try:
+            pos = uploaded_file.tell()
+            uploaded_file.seek(0, 2)
+            size = uploaded_file.tell()
+            uploaded_file.seek(pos)
+        except Exception:
+            size = 0
+    if size >= 1024 * 1024:
+        return f"{size / (1024 * 1024):.1f} MB"
+    if size >= 1024:
+        return f"{size / 1024:.1f} KB"
+    return f"{size} B"
+
+
+def render_selected_file_card(uploaded_file, file_kind="excel"):
+    if not uploaded_file:
+        return
+    icon_label = "XLS" if file_kind == "excel" else "PDF"
+    icon_class = "excel" if file_kind == "excel" else "pdf"
+    name = escape(getattr(uploaded_file, "name", "Uploaded file"))
+    size = escape(_file_size_label(uploaded_file))
+    st.markdown(
+        f"""
+        <div class="pas-file-card">
+            <div class="pas-file-icon {icon_class}">{icon_label}</div>
+            <div class="pas-file-main">
+                <div class="pas-file-name">{name}</div>
+                <div class="pas-file-size">{size}</div>
+            </div>
+            <div class="pas-file-check">✓</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def make_excel(summary_df, matched_df, unmatched_df, all_df) -> bytes:
     output = io.BytesIO()
     rules_df = pd.DataFrame({
@@ -1617,11 +1686,18 @@ def make_excel(summary_df, matched_df, unmatched_df, all_df) -> bytes:
 up_col1, up_col2 = st.columns(2)
 with up_col1:
     st.markdown('<div class="pas-upload-card"><div class="pas-upload-title">Upload Material Spreadsheet</div>', unsafe_allow_html=True)
-    plant_file = st.file_uploader("Upload Material Spreadsheet", type=["xlsx", "xls"], label_visibility="collapsed")
+    plant_file = st.file_uploader("Upload Material Spreadsheet", type=["xlsx", "xls"], label_visibility="collapsed", key="plant_upload")
+    if plant_file:
+        render_selected_file_card(plant_file, "excel")
     st.markdown('</div>', unsafe_allow_html=True)
 with up_col2:
     st.markdown('<div class="pas-upload-card"><div class="pas-upload-title">Upload Invoice PDFs or ZIP</div>', unsafe_allow_html=True)
-    invoice_files = st.file_uploader("Upload Invoice PDFs or ZIP", type=["pdf", "zip"], accept_multiple_files=True, label_visibility="collapsed")
+    invoice_files = st.file_uploader("Upload Invoice PDFs or ZIP", type=["pdf", "zip"], accept_multiple_files=True, label_visibility="collapsed", key="invoice_upload")
+    if invoice_files:
+        for _f in invoice_files[:3]:
+            render_selected_file_card(_f, "pdf")
+        if len(invoice_files) > 3:
+            st.markdown(f'<div class="pas-file-size">+{len(invoice_files)-3} more file(s) selected</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 run = st.button("▶  Run reconciliation", use_container_width=True)
