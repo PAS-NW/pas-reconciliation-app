@@ -1752,7 +1752,7 @@ with up_col2:
             st.markdown(f'<div class="pas-file-size">+{len(invoice_files)-3} more file(s) selected</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-run = st.button("▶  Run reconciliation", use_container_width=True)
+run = st.button("▶  Run Reconciliation", use_container_width=True)
 
 if run:
     if not plant_file or not invoice_files:
@@ -1786,9 +1786,9 @@ if run:
         with c1:
             st.markdown(f'<div class="kpi-card"><div class="kpi-icon"><svg viewBox="0 0 24 24"><path d="M8 7V3h8l4 4v14H6V7z"/><path d="M16 3v5h5"/><path d="M9 13h6"/><path d="M9 17h4"/><path d="M4 7h2v14h12"/></svg></div><div><div class="kpi-label">Total invoices</div><div class="kpi-value">{total}</div><div class="kpi-sub">Invoices Analysed</div></div></div>', unsafe_allow_html=True)
         with c2:
-            st.markdown(f'<div class="kpi-card kpi-matched"><div class="kpi-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16.5 9"/></svg></div><div><div class="kpi-label">Matched</div><div class="kpi-value">{matched}</div><div class="kpi-sub">Matched to Spreadsheet.. Good times</div></div></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="kpi-card kpi-matched"><div class="kpi-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16.5 9"/></svg></div><div><div class="kpi-label">Matched</div><div class="kpi-value">{matched}</div><div class="kpi-sub">to Spreadsheet.. Good times</div></div></div>', unsafe_allow_html=True)
         with c3:
-            st.markdown(f'<div class="kpi-card kpi-unmatched"><div class="kpi-icon"><svg viewBox="0 0 24 24"><path d="M12 3l10 18H2L12 3z"/><path d="M12 9v5"/><path d="M12 18h.01"/></svg></div><div><div class="kpi-label">Unmatched</div><div class="kpi-value">{unmatched}</div><div class="kpi-sub">NOT Matched to Spreadsheet.. Bad Times</div></div></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="kpi-card kpi-unmatched"><div class="kpi-icon"><svg viewBox="0 0 24 24"><path d="M12 3l10 18H2L12 3z"/><path d="M12 9v5"/><path d="M12 18h.01"/></svg></div><div><div class="kpi-label">Query</div><div class="kpi-value">{unmatched}</div><div class="kpi-sub">to Spreadsheet.. Bad Times</div></div></div>', unsafe_allow_html=True)
         with c4:
             st.markdown(f'<div class="kpi-card"><div class="kpi-icon"><svg viewBox="0 0 24 24"><path d="M3 20h18"/><path d="M6 16v-4"/><path d="M11 16V8"/><path d="M16 16v-6"/><path d="M19 6l-5 5-3-3-5 5"/></svg></div><div><div class="kpi-label">Match %</div><div class="kpi-value">{match_pct}%</div><div class="kpi-sub">Percentage or whatever..</div></div></div>', unsafe_allow_html=True)
 
@@ -1807,7 +1807,7 @@ if run:
         dl_left, dl_right = st.columns([1.8, 1])
         with dl_right:
             st.download_button(
-                "⬇  Download Excel reconciliation",
+                "   Download Excel reconciliation",
                 data=excel_bytes,
                 file_name=f"PAS_Reconciliation_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
