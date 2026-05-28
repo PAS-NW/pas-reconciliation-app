@@ -21,7 +21,10 @@ PAS_BLACK = "#0A0A0A"
 PAS_DARK = "#171717"
 PAS_GREY = "#F4F4F4"
 
-st.set_page_config(page_title="PAS Plant Invoice Matching", layout="wide")
+st.set_page_config(
+    page_title="PAS Plant Invoice Matching",
+    page_icon="pas_logo.png",
+    layout="wide"
 
 st.markdown(
     f"""
