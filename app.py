@@ -79,7 +79,7 @@ st.markdown(
 
 with st.sidebar:
     st.image("pas_logo.png", use_column_width=True)
-    st.markdown("### PAS Invoice Reconciliation")
+    st.markdown("### PAS Plant Invoice Matching")
     st.markdown("Upload the Plant workbook and invoice PDFs/ZIP, then export a clean reconciliation workbook.")
     st.markdown("---")
     st.markdown("**Instructions:**")
