@@ -1795,11 +1795,7 @@ if run:
         st.markdown('<div class="pas-results-title">Results</div>', unsafe_allow_html=True)
         render_unmatched_table(unmatched_df)
         st.markdown(
-            '<div class="pas-support">For queries or support contact: '
-            '<a href="mailto:invoice@pasnw.co.uk">invoice@pasnw.co.uk</a>'
-            '&nbsp;&nbsp;&nbsp;'
-            '<a href="mailto:plant@pasnw.co.uk">plant@pasnw.co.uk</a>'
-            '</div>',
+          
             unsafe_allow_html=True,
         )
 
