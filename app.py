@@ -3,6 +3,7 @@ import re
 import zipfile
 from pathlib import Path
 from datetime import datetime
+from urllib.parse import quote
 from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
@@ -21,10 +22,7 @@ PAS_BLACK = "#0A0A0A"
 PAS_DARK = "#171717"
 PAS_GREY = "#F4F4F4"
 
-st.set_page_config(
-    page_title="PAS Plant Invoice Matching",
-    page_icon="pas_logo.png",
-    layout="wide")
+st.set_page_config(page_title="PAS Plant Invoice Matching", layout="wide")
 
 st.markdown(
     f"""
@@ -1318,6 +1316,55 @@ def clean_output_df(df: pd.DataFrame) -> pd.DataFrame:
     return out[OUTPUT_COLUMNS]
 
 
+
+
+def make_query_email_link(row) -> str:
+    """Create a mailto link for querying an unmatched invoice.
+
+    This opens the user's default mail client, CCs invoice@pasnw.co.uk,
+    and prepares a supplier query email. The To field is intentionally left
+    blank for now because supplier emails are not yet stored in the Plant sheet.
+    """
+    invoice_no = clean_cell(row.get("Invoice Number", "Unknown")) or "Unknown"
+    supplier = clean_cell(row.get("Supplier", "")) or "the supplier"
+    order_ref = clean_cell(row.get("Order Reference", "")) or "Not found"
+    reason = clean_cell(row.get("Unmatched Reason", "")) or "Invoice did not match the Plant order record"
+    pdf_file = clean_cell(row.get("PDF File", ""))
+
+    subject = f"Invoice Query: {invoice_no}"
+    body = (
+        "Hi,\n\n"
+        f"We are querying invoice {invoice_no}.\n\n"
+        "Our invoice matching system has flagged the following issue:\n\n"
+        f"Supplier: {supplier}\n"
+        f"Order reference: {order_ref}\n"
+        f"Reason: {reason}\n"
+    )
+    if pdf_file:
+        body += f"PDF file: {pdf_file}\n"
+    body += (
+        "\nPlease can you review and confirm whether this invoice is correct, "
+        "or send a revised invoice if required.\n\n"
+        "Kind regards,\n\n"
+        "PAS Plant Team"
+    )
+
+    return f"mailto:?cc=invoice@pasnw.co.uk&subject={quote(subject)}&body={quote(body)}"
+
+
+def add_query_email_column(df: pd.DataFrame) -> pd.DataFrame:
+    """Add a clickable Query Supplier mailto link for the app display only."""
+    out = clean_output_df(df).copy()
+    if out.empty:
+        out["Query Supplier"] = ""
+        return out
+    out["Query Supplier"] = out.apply(make_query_email_link, axis=1)
+    cols = list(out.columns)
+    # Put action link first so it is obvious to users.
+    cols = ["Query Supplier"] + [c for c in cols if c != "Query Supplier"]
+    return out[cols]
+
+
 def make_excel(summary_df, matched_df, unmatched_df, all_df) -> bytes:
     output = io.BytesIO()
     rules_df = pd.DataFrame({
@@ -1393,7 +1440,19 @@ if run:
         st.markdown("### Results")
         tab1, tab2 = st.tabs(["Unmatched", "All extracted invoices"])
         with tab1:
-            st.dataframe(clean_output_df(unmatched_df), use_container_width=True, hide_index=True)
+            st.dataframe(
+                add_query_email_column(unmatched_df),
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Query Supplier": st.column_config.LinkColumn(
+                        "Query Supplier",
+                        display_text="Query Supplier",
+                        help="Open Outlook/email draft to query this invoice",
+                    )
+                },
+            )
+            st.caption("Query Supplier opens an email draft with invoice@pasnw.co.uk CC'd. Choose plant@pasnw.co.uk as the sender in Outlook if available.")
         with tab2:
             st.dataframe(clean_output_df(all_df), use_container_width=True, hide_index=True)
 
