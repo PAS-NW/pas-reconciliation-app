@@ -492,6 +492,7 @@ st.markdown(
     table.pas-table tbody tr:nth-child(even) td {{ background:#fbfcfd !important; }}
     .pas-pdf-icon {{ display:inline-flex; align-items:center; justify-content:center; width:17px; height:20px; background:#e11d2e; color:#fff; border-radius:3px; font-size:9px; font-weight:950; margin-right:8px; vertical-align:middle; }}
     table.pas-table a {{ color:#006bd6 !important; font-weight:850 !important; }}
+    table.pas-table .query-cell {{ min-width:120px; white-space:nowrap; }}
     .pas-note, .pas-support, .pas-support * {{ color:#0A0A0A !important; }}
     .pas-support {{ margin-top:22px !important; font-size:15px !important; }}
     .pas-support a {{ color:#006bd6 !important; font-weight:900 !important; margin-left:12px; }}
@@ -1597,13 +1598,16 @@ def add_query_email_column(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def render_unmatched_table(df: pd.DataFrame):
-    """Render unmatched invoices as a clean white HTML table with PAS yellow headers."""
+    """Render unmatched invoices as a clean white HTML table with PAS yellow headers.
+
+    This deliberately uses plain HTML rather than Streamlit dataframe widgets so
+    Streamlit cannot render stray `None`/badge values before the table.
+    """
     display_df = add_query_email_column(df)
     if display_df.empty:
         st.success("No unmatched invoices. Nice one.")
         return
 
-    # Keep the on-screen table simple and operational.
     cols = [
         "Query Supplier",
         "PDF File",
@@ -1618,18 +1622,31 @@ def render_unmatched_table(df: pd.DataFrame):
     for col in cols:
         if col not in display_df.columns:
             display_df[col] = ""
-    display_df = display_df[cols]
+
+    display_df = display_df[cols].copy()
+    display_df = display_df.where(pd.notna(display_df), "")
+    display_df = display_df.replace({None: "", "None": "", "nan": "", "NaN": ""})
 
     header_html = "".join(f"<th>{escape(str(col))}</th>" for col in cols)
     body_rows = []
+
     for _, row in display_df.iterrows():
         cells = []
         for col in cols:
-            value = clean_cell(row.get(col, ""))
-            if col == "Query Supplier" and value:
-                cells.append(f'<td><a href="{escape(value, quote=True)}">✉ Query Supplier</a></td>')
+            raw_value = row.get(col, "")
+            value = "" if raw_value is None or pd.isna(raw_value) else str(raw_value).strip()
+            if value.lower() in {"none", "nan", "nat"}:
+                value = ""
+
+            if col == "Query Supplier":
+                if value:
+                    cells.append(f'<td class="query-cell"><a href="{escape(value, quote=True)}">✉ Query Supplier</a></td>')
+                else:
+                    cells.append('<td class="query-cell"></td>')
+            elif col == "PDF File":
+                cells.append(f'<td><span class="pas-pdf-icon">PDF</span>{escape(value)}</td>')
             else:
-                cells.append(f"<td><span class=\"pas-pdf-icon\">PDF</span>{escape(value)}</td>") if col == "PDF File" else cells.append(f"<td>{escape(value)}</td>")
+                cells.append(f"<td>{escape(value)}</td>")
         body_rows.append("<tr>" + "".join(cells) + "</tr>")
 
     table_html = f"""
