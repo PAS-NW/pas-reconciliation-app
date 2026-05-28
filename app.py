@@ -72,269 +72,253 @@ st.markdown(
         color: {PAS_BLACK} !important;
         font-weight: 900 !important;
     }}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 
-    /* Fun PAS bottom animation: yellow dump truck chasing stick man */
-    .pas-race-wrap {{
+st.markdown(
+    """
+    <style>
+    .pas-chase-stage {
         position: relative;
-        height: 230px;
-        margin-top: 58px;
+        width: 100%;
+        height: 42vh;
+        min-height: 260px;
         overflow: hidden;
+        margin-top: 8px;
         background: transparent;
-    }}
-    .pas-ground-line {{
+    }
+    .pas-chase-ground {
+        position: absolute;
+        left: 2%;
+        right: 2%;
+        bottom: 18px;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, #d7d7d7 12%, #d7d7d7 88%, transparent);
+        opacity: 0.72;
+    }
+    .pas-chase-runner {
+        position: absolute;
+        bottom: 18px;
+        left: -230px;
+        width: 230px;
+        height: 70px;
+        animation: pas-drive-across 13s linear infinite;
+        will-change: transform;
+    }
+    @keyframes pas-drive-across {
+        0% { transform: translateX(-260px); }
+        100% { transform: translateX(calc(100vw - 40px)); }
+    }
+    .pas-truck {
         position: absolute;
         left: 0;
-        right: 0;
-        bottom: 34px;
-        height: 2px;
-        background: linear-gradient(90deg, transparent 0%, #d5d5d5 10%, #b8b8b8 50%, #d5d5d5 90%, transparent 100%);
-    }}
-    .pas-race-scene {{
-        position: absolute;
-        bottom: 30px;
-        left: -360px;
-        width: 360px;
-        height: 150px;
-        animation: pasRaceAcross 9.5s linear infinite;
-        transform-origin: bottom left;
-    }}
-    @keyframes pasRaceAcross {{
-        0% {{ transform: translateX(-8vw); }}
-        100% {{ transform: translateX(calc(100vw + 680px)); }}
-    }}
-    .pas-stickman {{
-        position: absolute;
-        right: -55px;
-        bottom: 12px;
-        width: 72px;
-        height: 88px;
-        animation: pasManBob 0.34s ease-in-out infinite alternate;
-    }}
-    @keyframes pasManBob {{
-        from {{ transform: translateY(0px) rotate(-2deg); }}
-        to {{ transform: translateY(-7px) rotate(2deg); }}
-    }}
-    .pas-stickman .head {{
-        position: absolute;
-        right: 20px;
-        top: 0;
-        width: 28px;
-        height: 28px;
-        border: 4px solid #111;
-        border-radius: 50%;
-        background: white;
-    }}
-    .pas-stickman .head:before {{
-        content: "";
-        position: absolute;
-        left: 7px;
-        top: 8px;
-        width: 4px;
-        height: 4px;
-        background: #111;
-        border-radius: 50%;
-        box-shadow: 10px 0 0 #111;
-    }}
-    .pas-stickman .head:after {{
-        content: "";
-        position: absolute;
-        left: 8px;
-        top: 17px;
-        width: 13px;
-        height: 7px;
-        border-bottom: 3px solid #111;
-        border-radius: 0 0 14px 14px;
-        transform: rotate(180deg);
-    }}
-    .pas-stickman .body {{
-        position: absolute;
-        right: 33px;
-        top: 31px;
-        width: 5px;
-        height: 33px;
-        background: #111;
-        transform: rotate(-18deg);
-        border-radius: 4px;
-    }}
-    .pas-stickman .arm1, .pas-stickman .arm2, .pas-stickman .leg1, .pas-stickman .leg2 {{
-        position: absolute;
-        height: 5px;
-        background: #111;
-        border-radius: 4px;
-        transform-origin: left center;
-    }}
-    .pas-stickman .arm1 {{ right: 30px; top: 42px; width: 30px; transform: rotate(32deg); animation: pasArm1 0.34s infinite alternate; }}
-    .pas-stickman .arm2 {{ right: 8px; top: 44px; width: 30px; transform: rotate(148deg); animation: pasArm2 0.34s infinite alternate; }}
-    .pas-stickman .leg1 {{ right: 32px; top: 62px; width: 34px; transform: rotate(46deg); animation: pasLeg1 0.34s infinite alternate; }}
-    .pas-stickman .leg2 {{ right: 6px; top: 65px; width: 34px; transform: rotate(140deg); animation: pasLeg2 0.34s infinite alternate; }}
-    @keyframes pasArm1 {{ to {{ transform: rotate(-20deg); }} }}
-    @keyframes pasArm2 {{ to {{ transform: rotate(198deg); }} }}
-    @keyframes pasLeg1 {{ to {{ transform: rotate(10deg); }} }}
-    @keyframes pasLeg2 {{ to {{ transform: rotate(175deg); }} }}
-    .pas-sweat {{
-        position: absolute;
-        right: -6px;
-        top: 4px;
-        color: #22a7f0;
-        font-size: 20px;
-        font-weight: 900;
-        animation: pasSweat 0.65s ease-in-out infinite;
-    }}
-    @keyframes pasSweat {{
-        0%, 100% {{ opacity: 0.3; transform: translateY(0); }}
-        50% {{ opacity: 1; transform: translateY(-7px); }}
-    }}
-    .pas-speed-lines-man {{
-        position: absolute;
-        right: 40px;
-        bottom: 50px;
-        width: 42px;
-        height: 22px;
-        border-top: 3px solid #999;
-        border-bottom: 3px solid #999;
-        opacity: .7;
-    }}
-    .pas-speed-lines-man:before {{
-        content: "";
-        position: absolute;
-        left: 8px;
-        top: 8px;
-        width: 32px;
-        border-top: 3px solid #999;
-    }}
-    .pas-truck {{
-        position: absolute;
-        left: 38px;
-        bottom: 14px;
-        width: 185px;
-        height: 98px;
-        animation: pasTruckBounce 0.24s ease-in-out infinite alternate;
-    }}
-    @keyframes pasTruckBounce {{
-        from {{ transform: translateY(0); }}
-        to {{ transform: translateY(-3px); }}
-    }}
-    .pas-truck-bed {{
-        position: absolute;
-        left: 0;
-        top: 28px;
-        width: 116px;
-        height: 54px;
-        background: #FFD400;
-        border: 5px solid #0A0A0A;
-        clip-path: polygon(0 18%, 86% 0, 100% 100%, 8% 100%);
-        box-shadow: inset 0 -8px 0 rgba(0,0,0,0.10);
-    }}
-    .pas-truck-bed:after {{
-        content: "PAS";
-        position: absolute;
-        left: 34px;
-        top: 13px;
-        font-size: 28px;
-        font-weight: 1000;
-        color: #0A0A0A;
-        letter-spacing: -1px;
-    }}
-    .pas-cab {{
-        position: absolute;
-        left: 106px;
-        top: 20px;
-        width: 64px;
-        height: 62px;
-        background: #FFD400;
-        border: 5px solid #0A0A0A;
-        border-radius: 12px 10px 8px 6px;
-    }}
-    .pas-cab-window {{
-        position: absolute;
-        left: 114px;
-        top: 27px;
-        width: 30px;
-        height: 29px;
-        background: #93B7C8;
-        border: 4px solid #0A0A0A;
-        border-radius: 6px;
-    }}
-    .pas-cab-front {{
-        position: absolute;
-        left: 159px;
-        top: 49px;
-        width: 31px;
-        height: 30px;
-        background: #FFD400;
-        border: 5px solid #0A0A0A;
-        border-left: 0;
-        border-radius: 0 8px 7px 0;
-    }}
-    .pas-smile-driver {{
-        position: absolute;
-        left: 148px;
-        top: 34px;
-        width: 12px;
-        height: 12px;
-        background: #111;
-        border-radius: 50%;
-        box-shadow: 6px 8px 0 -2px #111;
-    }}
-    .pas-wheel {{
-        position: absolute;
         bottom: 0;
-        width: 40px;
-        height: 40px;
-        background: #111;
-        border-radius: 50%;
-        border: 5px solid #333;
-        animation: pasSpin 0.45s linear infinite;
-    }}
-    .pas-wheel:after {{
+        width: 86px;
+        height: 48px;
+        transform-origin: 50% 100%;
+        animation: pas-truck-bob 0.38s ease-in-out infinite alternate;
+    }
+    @keyframes pas-truck-bob {
+        from { transform: translateY(0); }
+        to { transform: translateY(-1.5px); }
+    }
+    .pas-truck .tray {
+        position: absolute;
+        left: 6px;
+        top: 12px;
+        width: 52px;
+        height: 25px;
+        background: #FFD400;
+        border: 3px solid #111;
+        border-radius: 4px 4px 7px 7px;
+        transform: skewX(-10deg);
+        box-shadow: inset 0 -4px 0 rgba(0,0,0,0.12);
+    }
+    .pas-truck .tray::before {
         content: "";
         position: absolute;
-        inset: 8px;
-        background: #FFD400;
-        border: 4px solid #111;
-        border-radius: 50%;
-    }}
-    .pas-wheel.one {{ left: 39px; }}
-    .pas-wheel.two {{ left: 127px; }}
-    @keyframes pasSpin {{ to {{ transform: rotate(360deg); }} }}
-    .pas-dust {{
-        position: absolute;
-        left: 0;
-        bottom: 10px;
+        left: 3px;
+        top: -10px;
         width: 50px;
-        height: 26px;
+        height: 12px;
+        background: #FFD400;
+        border: 3px solid #111;
+        border-bottom: 0;
+        border-radius: 5px 5px 0 0;
+        transform: skewX(-18deg);
+    }
+    .pas-truck .pas-text {
+        position: absolute;
+        left: 18px;
+        top: 21px;
+        font-weight: 1000;
+        font-size: 14px;
+        color: #111;
+        letter-spacing: -1px;
+        z-index: 3;
+    }
+    .pas-truck .cab {
+        position: absolute;
+        left: 58px;
+        top: 14px;
+        width: 26px;
+        height: 24px;
+        background: #FFD400;
+        border: 3px solid #111;
+        border-radius: 5px 7px 5px 3px;
+        box-shadow: inset -4px 0 0 rgba(0,0,0,0.08);
+    }
+    .pas-truck .cab::before {
+        content: "";
+        position: absolute;
+        left: 4px;
+        top: 3px;
+        width: 10px;
+        height: 9px;
+        background: #9fd0d8;
+        border: 2px solid #111;
+        border-radius: 2px;
+    }
+    .pas-truck .bonnet {
+        position: absolute;
+        left: 77px;
+        top: 27px;
+        width: 11px;
+        height: 11px;
+        background: #FFD400;
+        border: 3px solid #111;
+        border-left: 0;
+        border-radius: 0 4px 4px 0;
+    }
+    .pas-truck .wheel {
+        position: absolute;
+        bottom: -1px;
+        width: 17px;
+        height: 17px;
+        background: #111;
         border-radius: 50%;
-        background: rgba(190,151,97,0.35);
-        box-shadow: -24px 6px 0 rgba(190,151,97,0.22), -48px 9px 0 rgba(190,151,97,0.16), 18px 11px 0 rgba(190,151,97,0.18);
-        animation: pasDust 0.5s ease-in-out infinite alternate;
-    }}
-    @keyframes pasDust {{ to {{ transform: scale(1.15) translateX(-8px); opacity: .65; }} }}
-    .pas-truck-lines {{
+        border: 2px solid #111;
+        animation: pas-wheel-spin 0.38s linear infinite;
+    }
+    .pas-truck .wheel::after {
+        content: "";
+        position: absolute;
+        inset: 4px;
+        background: #FFD400;
+        border-radius: 50%;
+        border: 1px solid #111;
+    }
+    .pas-truck .wheel.w1 { left: 21px; }
+    .pas-truck .wheel.w2 { left: 63px; }
+    @keyframes pas-wheel-spin { to { transform: rotate(360deg); } }
+    .pas-dust {
         position: absolute;
         left: -28px;
-        top: 52px;
-        width: 42px;
+        bottom: 3px;
+        width: 44px;
         height: 20px;
-        border-top: 3px solid #888;
-        border-bottom: 3px solid #888;
-        opacity: .65;
-    }}
-    .pas-truck-lines:before {{
-        content: "";
+        opacity: .75;
+    }
+    .pas-dust span {
         position: absolute;
-        left: 8px;
-        top: 7px;
-        width: 32px;
-        border-top: 3px solid #888;
-    }}
-    .pas-bottom-note {{
+        display: block;
+        background: rgba(151, 117, 69, .22);
+        border-radius: 50%;
+        animation: pas-dust-puff .8s ease-in-out infinite;
+    }
+    .pas-dust span:nth-child(1) { width: 22px; height: 11px; left: 14px; bottom: 0; animation-delay: 0s; }
+    .pas-dust span:nth-child(2) { width: 16px; height: 8px; left: 2px; bottom: 4px; animation-delay: .18s; }
+    .pas-dust span:nth-child(3) { width: 10px; height: 6px; left: 34px; bottom: 5px; animation-delay: .34s; }
+    @keyframes pas-dust-puff {
+        0%,100% { transform: translateX(0) scale(1); opacity: .35; }
+        50% { transform: translateX(-8px) scale(1.18); opacity: .7; }
+    }
+    .pas-speed-lines {
         position: absolute;
-        bottom: 7px;
-        right: 18px;
-        font-size: 11px;
-        color: #999;
-    }}
+        left: -34px;
+        bottom: 27px;
+        width: 36px;
+        height: 18px;
+        opacity: .55;
+    }
+    .pas-speed-lines span {
+        display: block;
+        height: 2px;
+        margin: 4px 0;
+        background: #777;
+        border-radius: 2px;
+        animation: pas-lines .45s ease-in-out infinite alternate;
+    }
+    .pas-speed-lines span:nth-child(2) { width: 25px; margin-left: 7px; animation-delay: .08s; }
+    .pas-speed-lines span:nth-child(3) { width: 18px; margin-left: 15px; animation-delay: .16s; }
+    @keyframes pas-lines { from { transform: translateX(0); opacity: .25; } to { transform: translateX(-9px); opacity: .8; } }
+
+    .pas-stickman {
+        position: absolute;
+        left: 138px;
+        bottom: 4px;
+        width: 40px;
+        height: 50px;
+        animation: pas-stick-bounce .28s ease-in-out infinite alternate;
+    }
+    @keyframes pas-stick-bounce { from { transform: translateY(0); } to { transform: translateY(-3px); } }
+    .pas-stickman .head {
+        position: absolute;
+        left: 13px;
+        top: 2px;
+        width: 13px;
+        height: 13px;
+        border: 3px solid #111;
+        border-radius: 50%;
+        background: #fff;
+    }
+    .pas-stickman .body {
+        position: absolute;
+        left: 19px;
+        top: 17px;
+        width: 3px;
+        height: 18px;
+        background: #111;
+        border-radius: 3px;
+        transform: rotate(8deg);
+    }
+    .pas-stickman .arm-a,
+    .pas-stickman .arm-b,
+    .pas-stickman .leg-a,
+    .pas-stickman .leg-b {
+        position: absolute;
+        height: 3px;
+        background: #111;
+        border-radius: 3px;
+        transform-origin: left center;
+    }
+    .pas-stickman .arm-a { left: 19px; top: 22px; width: 15px; animation: pas-arm-a .36s infinite alternate; }
+    .pas-stickman .arm-b { left: 20px; top: 23px; width: 15px; animation: pas-arm-b .36s infinite alternate; }
+    .pas-stickman .leg-a { left: 20px; top: 34px; width: 18px; animation: pas-leg-a .32s infinite alternate; }
+    .pas-stickman .leg-b { left: 20px; top: 35px; width: 18px; animation: pas-leg-b .32s infinite alternate; }
+    @keyframes pas-arm-a { from { transform: rotate(-35deg); } to { transform: rotate(35deg); } }
+    @keyframes pas-arm-b { from { transform: rotate(42deg); } to { transform: rotate(-28deg); } }
+    @keyframes pas-leg-a { from { transform: rotate(43deg); } to { transform: rotate(-38deg); } }
+    @keyframes pas-leg-b { from { transform: rotate(-45deg); } to { transform: rotate(36deg); } }
+    .pas-stickman .run-lines {
+        position: absolute;
+        left: -26px;
+        top: 24px;
+        width: 24px;
+        opacity: .5;
+    }
+    .pas-stickman .run-lines span {
+        display: block;
+        height: 2px;
+        margin: 4px 0;
+        background: #777;
+        border-radius: 2px;
+        animation: pas-lines .35s ease-in-out infinite alternate;
+    }
+    .pas-stickman .run-lines span:nth-child(2) { width: 15px; margin-left: 6px; animation-delay: .08s; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -1345,43 +1329,6 @@ def make_excel(summary_df, matched_df, unmatched_df, all_df) -> bytes:
     return output.getvalue()
 
 
-
-
-def render_dump_truck_chase():
-    """Small animated PAS dump truck chasing a stick man across the bottom of the screen."""
-    st.markdown(
-        """
-        <div class="pas-race-wrap" aria-label="Animated PAS dump truck chasing a stick man">
-          <div class="pas-ground-line"></div>
-          <div class="pas-race-scene">
-            <div class="pas-truck-lines"></div>
-            <div class="pas-dust"></div>
-            <div class="pas-truck">
-              <div class="pas-truck-bed"></div>
-              <div class="pas-cab"></div>
-              <div class="pas-cab-window"></div>
-              <div class="pas-cab-front"></div>
-              <div class="pas-smile-driver"></div>
-              <div class="pas-wheel one"></div>
-              <div class="pas-wheel two"></div>
-            </div>
-            <div class="pas-speed-lines-man"></div>
-            <div class="pas-stickman">
-              <div class="pas-sweat">💧</div>
-              <div class="head"></div>
-              <div class="body"></div>
-              <div class="arm1"></div>
-              <div class="arm2"></div>
-              <div class="leg1"></div>
-              <div class="leg2"></div>
-            </div>
-          </div>
-          <div class="pas-bottom-note">PAS plant chasing invoice queries since 2026</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
 plant_file = st.file_uploader("Upload Plant workbook", type=["xlsx", "xls"])
 invoice_files = st.file_uploader("Upload invoice PDFs or ZIP", type=["pdf", "zip"], accept_multiple_files=True)
 
@@ -1445,4 +1392,32 @@ if run:
         st.exception(e)
 else:
     st.info("Upload your Plant workbook and invoice PDFs/ZIP, then click Run reconciliation.")
-    render_dump_truck_chase()
+    st.markdown(
+        """
+        <div class="pas-chase-stage" aria-hidden="true">
+            <div class="pas-chase-ground"></div>
+            <div class="pas-chase-runner">
+                <div class="pas-speed-lines"><span></span><span></span><span></span></div>
+                <div class="pas-dust"><span></span><span></span><span></span></div>
+                <div class="pas-truck">
+                    <div class="tray"></div>
+                    <div class="pas-text">PAS</div>
+                    <div class="cab"></div>
+                    <div class="bonnet"></div>
+                    <div class="wheel w1"></div>
+                    <div class="wheel w2"></div>
+                </div>
+                <div class="pas-stickman">
+                    <div class="head"></div>
+                    <div class="body"></div>
+                    <div class="arm-a"></div>
+                    <div class="arm-b"></div>
+                    <div class="leg-a"></div>
+                    <div class="leg-b"></div>
+                    <div class="run-lines"><span></span><span></span></div>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
