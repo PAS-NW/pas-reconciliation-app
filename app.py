@@ -72,6 +72,177 @@ st.markdown(
         color: {PAS_BLACK} !important;
         font-weight: 900 !important;
     }}
+
+
+    /* Animated PAS digger */
+    .digger-stage {{
+        margin: 70px auto 30px auto;
+        width: min(720px, 92%);
+        height: 330px;
+        position: relative;
+        overflow: visible;
+    }}
+    .digger-ground {{
+        position: absolute;
+        left: 80px;
+        right: 40px;
+        bottom: 40px;
+        height: 18px;
+        background: linear-gradient(90deg, transparent 0%, #b56a2d 16%, #8a4b22 50%, #b56a2d 84%, transparent 100%);
+        border-radius: 50%;
+        opacity: .7;
+        filter: blur(.2px);
+    }}
+    .soil-pile {{
+        position: absolute;
+        right: 105px;
+        bottom: 48px;
+        width: 210px;
+        height: 72px;
+        background: radial-gradient(circle at 55% 20%, #7b3f1b 0 18%, #9a5729 19% 42%, #6f3818 43% 100%);
+        border-radius: 60% 60% 35% 35%;
+        transform-origin: bottom center;
+        animation: soilPulse 1.8s ease-in-out infinite;
+    }}
+    .soil-particle {{
+        position: absolute;
+        right: 220px;
+        bottom: 112px;
+        width: 9px;
+        height: 9px;
+        background: #7a3e1b;
+        border-radius: 50%;
+        opacity: 0;
+        animation: dirtFly 1.8s ease-in-out infinite;
+    }}
+    .soil-particle.p2 {{ right: 185px; bottom: 122px; width: 7px; height: 7px; animation-delay: .18s; }}
+    .soil-particle.p3 {{ right: 155px; bottom: 105px; width: 6px; height: 6px; animation-delay: .32s; }}
+    .soil-particle.p4 {{ right: 250px; bottom: 98px; width: 5px; height: 5px; animation-delay: .48s; }}
+    .digger {{
+        position: absolute;
+        left: 70px;
+        bottom: 58px;
+        width: 485px;
+        height: 240px;
+        animation: machineRock 1.8s ease-in-out infinite;
+        transform-origin: 180px 190px;
+    }}
+    .track {{
+        position: absolute;
+        left: 0;
+        bottom: 0;
+        width: 275px;
+        height: 54px;
+        background: #151515;
+        border-radius: 28px;
+        box-shadow: inset 0 -8px 0 #333;
+    }}
+    .track::before {{
+        content: "";
+        position: absolute;
+        inset: 10px 18px;
+        border-radius: 25px;
+        background: repeating-linear-gradient(90deg, #555 0 18px, #1f1f1f 18px 32px);
+        opacity: .9;
+        animation: trackMove 1.2s linear infinite;
+    }}
+    .cab {{
+        position: absolute;
+        left: 105px;
+        bottom: 50px;
+        width: 88px;
+        height: 100px;
+        background: linear-gradient(135deg, #202020 0%, #38444a 100%);
+        border: 5px solid #111;
+        border-radius: 18px 18px 8px 8px;
+        z-index: 3;
+    }}
+    .cab::after {{
+        content: "";
+        position: absolute;
+        left: 13px;
+        top: 12px;
+        width: 50px;
+        height: 58px;
+        background: rgba(130, 196, 210, .45);
+        border-radius: 9px;
+        border: 2px solid rgba(255,255,255,.25);
+    }}
+    .body {{
+        position: absolute;
+        left: 8px;
+        bottom: 48px;
+        width: 165px;
+        height: 80px;
+        background: linear-gradient(#ffdf26, #ffc400);
+        border: 4px solid #111;
+        border-radius: 45px 18px 14px 14px;
+        z-index: 2;
+        box-shadow: inset 0 -10px 0 rgba(0,0,0,.08);
+    }}
+    .body::after {{
+        content: "PAS";
+        position: absolute;
+        left: 38px;
+        top: 24px;
+        color: #050505;
+        font-size: 35px;
+        line-height: 1;
+        font-weight: 1000;
+        letter-spacing: -2px;
+    }}
+    .beacon {{
+        position: absolute;
+        left: 118px;
+        bottom: 153px;
+        width: 16px;
+        height: 15px;
+        background: #ff8a00;
+        border: 3px solid #111;
+        border-radius: 12px 12px 3px 3px;
+        z-index: 4;
+        animation: beaconFlash .9s linear infinite;
+    }}
+    .boom, .stick, .bucket-link {{
+        position: absolute;
+        height: 28px;
+        background: linear-gradient(#ffdf26, #ffc400);
+        border: 4px solid #111;
+        border-radius: 18px;
+        transform-origin: left center;
+        z-index: 1;
+    }}
+    .boom {{ left: 168px; bottom: 143px; width: 190px; transform: rotate(-22deg); animation: boomMove 1.8s ease-in-out infinite; }}
+    .stick {{ left: 332px; bottom: 205px; width: 145px; transform: rotate(58deg); animation: stickMove 1.8s ease-in-out infinite; }}
+    .bucket-link {{ left: 429px; bottom: 88px; width: 62px; height: 20px; transform: rotate(74deg); animation: linkMove 1.8s ease-in-out infinite; }}
+    .bucket {{
+        position: absolute;
+        left: 456px;
+        bottom: 51px;
+        width: 62px;
+        height: 58px;
+        background: #2c2c2c;
+        border: 4px solid #111;
+        border-radius: 8px 8px 32px 32px;
+        transform-origin: 18px 10px;
+        transform: rotate(-18deg);
+        z-index: 4;
+        animation: bucketDig 1.8s ease-in-out infinite;
+    }}
+    .pin {{ position: absolute; width: 17px; height: 17px; background: #111; border: 4px solid #ffdf26; border-radius: 50%; z-index: 5; }}
+    .pin.p1 {{ left: 176px; bottom: 143px; }}
+    .pin.p2 {{ left: 342px; bottom: 183px; }}
+    .pin.p3 {{ left: 434px; bottom: 105px; }}
+    @keyframes machineRock {{ 0%, 100% {{ transform: rotate(0deg) translateY(0); }} 45% {{ transform: rotate(-.7deg) translateY(1px); }} 70% {{ transform: rotate(.5deg) translateY(-1px); }} }}
+    @keyframes boomMove {{ 0%, 100% {{ transform: rotate(-22deg); }} 50% {{ transform: rotate(-15deg); }} }}
+    @keyframes stickMove {{ 0%, 100% {{ transform: rotate(58deg); }} 50% {{ transform: rotate(70deg); }} }}
+    @keyframes linkMove {{ 0%, 100% {{ transform: rotate(74deg); }} 50% {{ transform: rotate(88deg); }} }}
+    @keyframes bucketDig {{ 0%, 100% {{ transform: rotate(-18deg) translate(0, 0); }} 45% {{ transform: rotate(-48deg) translate(-3px, 14px); }} 70% {{ transform: rotate(4deg) translate(6px, -4px); }} }}
+    @keyframes dirtFly {{ 0%, 35% {{ opacity: 0; transform: translate(0, 0) scale(.4); }} 50% {{ opacity: 1; transform: translate(-35px, -28px) scale(1); }} 100% {{ opacity: 0; transform: translate(-70px, 10px) scale(.25); }} }}
+    @keyframes soilPulse {{ 0%, 100% {{ transform: scaleX(1); }} 50% {{ transform: scaleX(1.06) translateY(-2px); }} }}
+    @keyframes trackMove {{ from {{ background-position: 0 0; }} to {{ background-position: 64px 0; }} }}
+    @keyframes beaconFlash {{ 0%, 100% {{ filter: brightness(1); }} 50% {{ filter: brightness(1.9); }} }}
+
     </style>
     """,
     unsafe_allow_html=True,
@@ -98,6 +269,36 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+
+
+def show_animated_digger():
+    st.markdown(
+        """
+        <div class="digger-stage" aria-label="Animated PAS digger">
+          <div class="digger-ground"></div>
+          <div class="soil-pile"></div>
+          <div class="soil-particle p1"></div>
+          <div class="soil-particle p2"></div>
+          <div class="soil-particle p3"></div>
+          <div class="soil-particle p4"></div>
+          <div class="digger">
+            <div class="track"></div>
+            <div class="body"></div>
+            <div class="cab"></div>
+            <div class="beacon"></div>
+            <div class="boom"></div>
+            <div class="stick"></div>
+            <div class="bucket-link"></div>
+            <div class="bucket"></div>
+            <div class="pin p1"></div>
+            <div class="pin p2"></div>
+            <div class="pin p3"></div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 BAD_SUPPLIER_PATTERNS = [
     "invoice", "invoice no", "invoice number", "vat", "vat number", "account", "account no",
@@ -1145,3 +1346,4 @@ if run:
         st.exception(e)
 else:
     st.info("Upload your Plant workbook and invoice PDFs/ZIP, then click Run reconciliation.")
+    show_animated_digger()
