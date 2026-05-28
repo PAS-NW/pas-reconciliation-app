@@ -83,230 +83,233 @@ st.markdown(
 st.markdown(
     """
     <style>
+    /* Tighter sidebar alignment: move PAS logo nearer to the top of the hero banner */
+    section[data-testid="stSidebar"] div[data-testid="stImage"] {
+        margin-top: -2.35rem !important;
+        margin-bottom: 1.15rem !important;
+    }
+    section[data-testid="stSidebar"] div[data-testid="stImage"] img {
+        display: block;
+    }
+
+    /* Small bottom-only chase animation */
     .pas-chase-stage {
         position: relative;
         width: 100%;
-        height: 56vh;
-        min-height: 430px;
+        height: calc(100vh - 385px);
+        min-height: 500px;
         overflow: hidden;
         margin-top: 0;
+        margin-bottom: -22px;
         background: transparent;
+        pointer-events: none;
     }
     .pas-chase-ground {
         position: absolute;
-        left: 2%;
-        right: 2%;
+        left: 4%;
+        right: 4%;
         bottom: 0;
         height: 1px;
-        background: linear-gradient(90deg, transparent, #d7d7d7 12%, #d7d7d7 88%, transparent);
-        opacity: 0.72;
+        background: linear-gradient(90deg, transparent, #d8d8d8 15%, #d8d8d8 85%, transparent);
+        opacity: .7;
     }
     .pas-chase-runner {
         position: absolute;
-        bottom: 1px;
-        left: -230px;
-        width: 230px;
-        height: 70px;
-        animation: pas-drive-across 13s linear infinite;
+        bottom: 0;
+        left: -150px;
+        width: 160px;
+        height: 44px;
+        animation: pas-drive-across 14s linear infinite;
         will-change: transform;
     }
     @keyframes pas-drive-across {
-        0% { transform: translateX(-260px); }
-        100% { transform: translateX(calc(100vw - 40px)); }
+        0% { transform: translateX(-180px); }
+        100% { transform: translateX(calc(100vw - 30px)); }
     }
-    .pas-truck {
+
+    /* Dump truck - intentionally small and simple */
+    .pas-mini-truck {
         position: absolute;
         left: 0;
-        bottom: 0;
-        width: 86px;
-        height: 48px;
-        transform-origin: 50% 100%;
-        animation: pas-truck-bob 0.38s ease-in-out infinite alternate;
+        bottom: 3px;
+        width: 62px;
+        height: 34px;
+        animation: pas-truck-bob .32s ease-in-out infinite alternate;
     }
     @keyframes pas-truck-bob {
         from { transform: translateY(0); }
-        to { transform: translateY(-1.5px); }
+        to { transform: translateY(-1.2px); }
     }
-    .pas-truck .tray {
+    .pas-mini-truck .truck-bed {
         position: absolute;
-        left: 6px;
-        top: 12px;
-        width: 52px;
-        height: 25px;
+        left: 4px;
+        top: 8px;
+        width: 36px;
+        height: 19px;
         background: #FFD400;
-        border: 3px solid #111;
-        border-radius: 4px 4px 7px 7px;
+        border: 2px solid #111;
+        border-radius: 3px 3px 5px 5px;
         transform: skewX(-10deg);
-        box-shadow: inset 0 -4px 0 rgba(0,0,0,0.12);
+        box-shadow: inset 0 -3px 0 rgba(0,0,0,.16);
     }
-    .pas-truck .tray::before {
+    .pas-mini-truck .truck-bed::before {
+        content: "";
+        position: absolute;
+        left: 1px;
+        top: -8px;
+        width: 36px;
+        height: 8px;
+        background: #FFD400;
+        border: 2px solid #111;
+        border-bottom: 0;
+        border-radius: 3px 3px 0 0;
+        transform: skewX(-18deg);
+    }
+    .pas-mini-truck .truck-logo {
+        position: absolute;
+        left: 13px;
+        top: 11px;
+        font-size: 10px;
+        line-height: 1;
+        font-weight: 1000;
+        letter-spacing: -.8px;
+        color: #111;
+        z-index: 5;
+    }
+    .pas-mini-truck .truck-cab {
+        position: absolute;
+        left: 41px;
+        top: 10px;
+        width: 18px;
+        height: 18px;
+        background: #FFD400;
+        border: 2px solid #111;
+        border-radius: 3px 5px 3px 2px;
+        box-shadow: inset -3px 0 0 rgba(0,0,0,.1);
+    }
+    .pas-mini-truck .truck-cab::before {
         content: "";
         position: absolute;
         left: 3px;
-        top: -10px;
-        width: 50px;
-        height: 12px;
-        background: #FFD400;
-        border: 3px solid #111;
-        border-bottom: 0;
-        border-radius: 5px 5px 0 0;
-        transform: skewX(-18deg);
-    }
-    .pas-truck .pas-text {
-        position: absolute;
-        left: 18px;
-        top: 17px;
-        font-weight: 1000;
-        font-size: 14px;
-        color: #111;
-        letter-spacing: -1px;
-        z-index: 3;
-    }
-    .pas-truck .cab {
-        position: absolute;
-        left: 58px;
-        top: 14px;
-        width: 26px;
-        height: 24px;
-        background: #FFD400;
-        border: 3px solid #111;
-        border-radius: 5px 7px 5px 3px;
-        box-shadow: inset -4px 0 0 rgba(0,0,0,0.08);
-    }
-    .pas-truck .cab::before {
-        content: "";
-        position: absolute;
-        left: 4px;
-        top: 3px;
-        width: 10px;
-        height: 9px;
+        top: 2px;
+        width: 7px;
+        height: 7px;
         background: #9fd0d8;
-        border: 2px solid #111;
+        border: 1.7px solid #111;
         border-radius: 2px;
     }
-    .pas-truck .bonnet {
+    .pas-mini-truck .truck-nose {
         position: absolute;
-        left: 77px;
-        top: 27px;
-        width: 11px;
-        height: 11px;
+        left: 56px;
+        top: 21px;
+        width: 7px;
+        height: 7px;
         background: #FFD400;
-        border: 3px solid #111;
+        border: 2px solid #111;
         border-left: 0;
-        border-radius: 0 4px 4px 0;
+        border-radius: 0 3px 3px 0;
     }
-    .pas-truck .wheel {
+    .pas-mini-truck .truck-wheel {
         position: absolute;
         bottom: -1px;
-        width: 17px;
-        height: 17px;
-        background: #111;
+        width: 12px;
+        height: 12px;
         border-radius: 50%;
-        border: 2px solid #111;
-        animation: pas-wheel-spin 0.38s linear infinite;
+        background: #111;
+        animation: pas-wheel-spin .28s linear infinite;
     }
-    .pas-truck .wheel::after {
+    .pas-mini-truck .truck-wheel::after {
         content: "";
         position: absolute;
-        inset: 4px;
+        inset: 3px;
+        border-radius: 50%;
         background: #FFD400;
-        border-radius: 50%;
-        border: 1px solid #111;
     }
-    .pas-truck .wheel.w1 { left: 21px; }
-    .pas-truck .wheel.w2 { left: 63px; }
+    .pas-mini-truck .wheel-one { left: 17px; }
+    .pas-mini-truck .wheel-two { left: 47px; }
     @keyframes pas-wheel-spin { to { transform: rotate(360deg); } }
-    .pas-dust {
-        position: absolute;
-        left: -28px;
-        bottom: 3px;
-        width: 44px;
-        height: 20px;
-        opacity: .75;
-    }
-    .pas-dust span {
-        position: absolute;
-        display: block;
-        background: rgba(151, 117, 69, .22);
-        border-radius: 50%;
-        animation: pas-dust-puff .8s ease-in-out infinite;
-    }
-    .pas-dust span:nth-child(1) { width: 22px; height: 11px; left: 14px; bottom: 0; animation-delay: 0s; }
-    .pas-dust span:nth-child(2) { width: 16px; height: 8px; left: 2px; bottom: 4px; animation-delay: .18s; }
-    .pas-dust span:nth-child(3) { width: 10px; height: 6px; left: 34px; bottom: 5px; animation-delay: .34s; }
-    @keyframes pas-dust-puff {
-        0%,100% { transform: translateX(0) scale(1); opacity: .35; }
-        50% { transform: translateX(-8px) scale(1.18); opacity: .7; }
-    }
-    .pas-speed-lines {
-        position: absolute;
-        left: -34px;
-        bottom: 27px;
-        width: 36px;
-        height: 18px;
-        opacity: .55;
-    }
-    .pas-speed-lines span {
-        display: block;
-        height: 2px;
-        margin: 4px 0;
-        background: #777;
-        border-radius: 2px;
-        animation: pas-lines .45s ease-in-out infinite alternate;
-    }
-    .pas-speed-lines span:nth-child(2) { width: 25px; margin-left: 7px; animation-delay: .08s; }
-    .pas-speed-lines span:nth-child(3) { width: 18px; margin-left: 15px; animation-delay: .16s; }
-    @keyframes pas-lines { from { transform: translateX(0); opacity: .25; } to { transform: translateX(-9px); opacity: .8; } }
 
-    .pas-stickman {
+    .pas-mini-dust {
         position: absolute;
-        left: 132px;
+        left: -27px;
         bottom: 2px;
-        width: 34px;
-        height: 48px;
-        animation: pas-stick-bounce .25s ease-in-out infinite alternate;
+        width: 40px;
+        height: 15px;
     }
-    @keyframes pas-stick-bounce { from { transform: translateY(0); } to { transform: translateY(-2px); } }
-    .pas-stickman svg {
-        width: 34px;
-        height: 48px;
-        overflow: visible;
-    }
-    .pas-stickman .stick-stroke {
-        stroke: #111;
-        stroke-width: 4.2;
-        stroke-linecap: round;
-        fill: none;
-    }
-    .pas-stickman .stick-head {
-        fill: #fff;
-        stroke: #111;
-        stroke-width: 3.7;
-    }
-    .pas-stickman .arm-front { transform-origin: 25px 25px; animation: pas-svg-arm-front .30s ease-in-out infinite alternate; }
-    .pas-stickman .arm-back { transform-origin: 25px 25px; animation: pas-svg-arm-back .30s ease-in-out infinite alternate; }
-    .pas-stickman .leg-front { transform-origin: 25px 39px; animation: pas-svg-leg-front .26s ease-in-out infinite alternate; }
-    .pas-stickman .leg-back { transform-origin: 25px 39px; animation: pas-svg-leg-back .26s ease-in-out infinite alternate; }
-    @keyframes pas-svg-arm-front { from { transform: rotate(28deg); } to { transform: rotate(-34deg); } }
-    @keyframes pas-svg-arm-back { from { transform: rotate(-34deg); } to { transform: rotate(30deg); } }
-    @keyframes pas-svg-leg-front { from { transform: rotate(-34deg); } to { transform: rotate(34deg); } }
-    @keyframes pas-svg-leg-back { from { transform: rotate(34deg); } to { transform: rotate(-34deg); } }
-    .pas-stickman .run-lines {
+    .pas-mini-dust span {
         position: absolute;
-        left: -25px;
-        top: 25px;
-        width: 24px;
-        opacity: .46;
-    }
-    .pas-stickman .run-lines span {
         display: block;
-        height: 2px;
-        margin: 4px 0;
+        border-radius: 50%;
+        background: rgba(151,117,69,.22);
+        animation: pas-dust-puff .72s ease-in-out infinite;
+    }
+    .pas-mini-dust span:nth-child(1) { width: 17px; height: 8px; left: 13px; bottom: 0; }
+    .pas-mini-dust span:nth-child(2) { width: 12px; height: 6px; left: 3px; bottom: 3px; animation-delay: .16s; }
+    .pas-mini-dust span:nth-child(3) { width: 8px; height: 5px; left: 28px; bottom: 4px; animation-delay: .31s; }
+    @keyframes pas-dust-puff {
+        0%,100% { transform: translateX(0) scale(1); opacity: .28; }
+        50% { transform: translateX(-7px) scale(1.15); opacity: .68; }
+    }
+
+    .pas-mini-lines {
+        position: absolute;
+        width: 24px;
+        height: 14px;
+        opacity: .48;
+    }
+    .pas-mini-lines.left { left: -31px; bottom: 21px; }
+    .pas-mini-lines.runner-lines { left: 76px; bottom: 17px; }
+    .pas-mini-lines span {
+        display: block;
+        height: 1.5px;
+        margin: 3px 0;
         background: #777;
         border-radius: 2px;
-        animation: pas-lines .35s ease-in-out infinite alternate;
+        animation: pas-lines .36s ease-in-out infinite alternate;
     }
-    .pas-stickman .run-lines span:nth-child(2) { width: 15px; margin-left: 6px; animation-delay: .08s; }
+    .pas-mini-lines span:nth-child(2) { width: 17px; margin-left: 6px; animation-delay: .08s; }
+    .pas-mini-lines span:nth-child(3) { width: 12px; margin-left: 11px; animation-delay: .15s; }
+    @keyframes pas-lines { from { transform: translateX(0); opacity: .25; } to { transform: translateX(-7px); opacity: .8; } }
+
+    /* Stick man: cleaner, smaller and no sweat beads */
+    .pas-mini-man {
+        position: absolute;
+        left: 105px;
+        bottom: 5px;
+        width: 25px;
+        height: 34px;
+        animation: pas-man-bounce .24s ease-in-out infinite alternate;
+    }
+    @keyframes pas-man-bounce { from { transform: translateY(0); } to { transform: translateY(-1.4px); } }
+    .pas-mini-man .head {
+        position: absolute;
+        top: 0;
+        left: 9px;
+        width: 8px;
+        height: 8px;
+        background: #fff;
+        border: 2px solid #111;
+        border-radius: 50%;
+    }
+    .pas-mini-man .body,
+    .pas-mini-man .arm-a,
+    .pas-mini-man .arm-b,
+    .pas-mini-man .leg-a,
+    .pas-mini-man .leg-b {
+        position: absolute;
+        background: #111;
+        border-radius: 5px;
+        transform-origin: 50% 0;
+    }
+    .pas-mini-man .body { width: 3px; height: 15px; left: 13px; top: 11px; transform: rotate(8deg); }
+    .pas-mini-man .arm-a { width: 3px; height: 13px; left: 13px; top: 15px; animation: pas-arm-a .28s ease-in-out infinite alternate; }
+    .pas-mini-man .arm-b { width: 3px; height: 12px; left: 13px; top: 15px; animation: pas-arm-b .28s ease-in-out infinite alternate; }
+    .pas-mini-man .leg-a { width: 3px; height: 15px; left: 14px; top: 25px; animation: pas-leg-a .25s ease-in-out infinite alternate; }
+    .pas-mini-man .leg-b { width: 3px; height: 14px; left: 13px; top: 25px; animation: pas-leg-b .25s ease-in-out infinite alternate; }
+    @keyframes pas-arm-a { from { transform: rotate(58deg); } to { transform: rotate(-48deg); } }
+    @keyframes pas-arm-b { from { transform: rotate(-55deg); } to { transform: rotate(48deg); } }
+    @keyframes pas-leg-a { from { transform: rotate(-57deg); } to { transform: rotate(48deg); } }
+    @keyframes pas-leg-b { from { transform: rotate(52deg); } to { transform: rotate(-50deg); } }
     </style>
     """,
     unsafe_allow_html=True,
@@ -1385,26 +1388,24 @@ else:
         <div class="pas-chase-stage" aria-hidden="true">
             <div class="pas-chase-ground"></div>
             <div class="pas-chase-runner">
-                <div class="pas-speed-lines"><span></span><span></span><span></span></div>
-                <div class="pas-dust"><span></span><span></span><span></span></div>
-                <div class="pas-truck">
-                    <div class="tray"></div>
-                    <div class="pas-text">PAS</div>
-                    <div class="cab"></div>
-                    <div class="bonnet"></div>
-                    <div class="wheel w1"></div>
-                    <div class="wheel w2"></div>
+                <div class="pas-mini-lines left"><span></span><span></span><span></span></div>
+                <div class="pas-mini-dust"><span></span><span></span><span></span></div>
+                <div class="pas-mini-truck">
+                    <div class="truck-bed"></div>
+                    <div class="truck-logo">PAS</div>
+                    <div class="truck-cab"></div>
+                    <div class="truck-nose"></div>
+                    <div class="truck-wheel wheel-one"></div>
+                    <div class="truck-wheel wheel-two"></div>
                 </div>
-                <div class="pas-stickman">
-                    <div class="run-lines"><span></span><span></span></div>
-                    <svg viewBox="0 0 50 60" aria-hidden="true">
-                        <circle class="stick-head" cx="27" cy="10" r="7" />
-                        <line class="stick-stroke" x1="25" y1="18" x2="25" y2="38" />
-                        <line class="stick-stroke arm-front" x1="25" y1="25" x2="42" y2="18" />
-                        <line class="stick-stroke arm-back" x1="25" y1="25" x2="10" y2="31" />
-                        <line class="stick-stroke leg-front" x1="25" y1="38" x2="43" y2="50" />
-                        <line class="stick-stroke leg-back" x1="25" y1="38" x2="9" y2="53" />
-                    </svg>
+                <div class="pas-mini-lines runner-lines"><span></span><span></span></div>
+                <div class="pas-mini-man">
+                    <div class="head"></div>
+                    <div class="body"></div>
+                    <div class="arm-a"></div>
+                    <div class="arm-b"></div>
+                    <div class="leg-a"></div>
+                    <div class="leg-b"></div>
                 </div>
             </div>
         </div>
