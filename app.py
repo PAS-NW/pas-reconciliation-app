@@ -1856,15 +1856,7 @@ if run:
 
         st.markdown('<div class="pas-results-title">Results</div>', unsafe_allow_html=True)
         render_unmatched_table(unmatched_df)
-        st.markdown(
-            '<div class="pas-support">For queries or support contact: '
-            '<a href="mailto:invoices@pasnw.co.uk">invoices@pasnw.co.uk</a>'
-            '&nbsp;&nbsp;&nbsp;'
-            '<a href="mailto:plant@pasnw.co.uk">plant@pasnw.co.uk</a>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-
+        
         excel_bytes = make_excel(summary_df, matched_df, unmatched_df, all_df)
         dl_left, dl_right = st.columns([1.8, 1])
         with dl_right:
