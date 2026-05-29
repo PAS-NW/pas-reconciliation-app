@@ -1638,6 +1638,8 @@ def reconcile_invoice(inv: Dict, plant_df: pd.DataFrame) -> Dict:
             else:
                 ignored_plant_rows.append(label)
 
+    supplier_email = extract_supplier_email(text)
+
     warning_flags = []
     if matched and ignored_plant_rows:
         warning_flags.append("PO contains additional Plant rows not billed on this invoice")
@@ -1653,7 +1655,6 @@ def reconcile_invoice(inv: Dict, plant_df: pd.DataFrame) -> Dict:
     else:
         confidence_level = "Review required"
 
-    supplier_email = extract_supplier_email(text)
     status = "Matched" if matched else "Unmatched"
     return {
         "PDF File": inv["source_file"],
