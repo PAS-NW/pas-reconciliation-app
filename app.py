@@ -1648,7 +1648,22 @@ def reconcile_invoice(inv: Dict, plant_df: pd.DataFrame) -> Dict:
     if not invoice_line_rates and not invoice_line_charges:
         warning_flags.append("No structured invoice line rates detected")
 
-    if matched and refs and not warning_flags:
+    # Operated Plant override: any invoice linked to a Plant row/status containing
+    # "Operated Plant" must be queried manually, even if the values otherwise match.
+    operated_plant_override = False
+    if not matched_rows.empty:
+        plant_statuses_all = " ".join(
+            clean_cell(x) for x in matched_rows["__status"].fillna("").tolist()
+        ).lower()
+        if "operated plant" in plant_statuses_all or "operated" in plant_statuses_all:
+            operated_plant_override = True
+            matched = False
+            reason = "Operated Plant requires manual review"
+            warning_flags.append("OPERATED_PLANT_OVERRIDE")
+
+    if operated_plant_override:
+        confidence_level = "Manual Review Required"
+    elif matched and refs and not warning_flags:
         confidence_level = "High"
     elif matched:
         confidence_level = "High - with notes"
@@ -1674,7 +1689,7 @@ def reconcile_invoice(inv: Dict, plant_df: pd.DataFrame) -> Dict:
         "Matched Plant Row(s)": ", ".join(plant_rows),
         "Match Status": status,
         "Unmatched Reason": "" if matched else reason,
-        "Match Reason": reason if matched else "",
+        "Match Reason": "Rule override: Operated Plant auto-query" if operated_plant_override else (reason if matched else ""),
         "Plant Rows Checked": ", ".join(plant_rows),
         "Plant Rows Used": "; ".join(used_plant_rows),
         "Ignored PO Lines": "; ".join(ignored_plant_rows),
