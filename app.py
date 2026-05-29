@@ -1598,6 +1598,61 @@ def reconcile_invoice(inv: Dict, plant_df: pd.DataFrame) -> Dict:
     else:
         matched, reason, variance = values_match(plant_rate_values, invoice_values, line_items)
 
+    # Audit trail support.
+    # This does not change the screen layout or the matching decision. It simply records
+    # the evidence used so the exported workbook can explain every pass/fail.
+    invoice_line_rates = sorted(set(
+        round(float(x.get("rate")), 2)
+        for x in line_items
+        if x.get("rate") is not None and float(x.get("rate")) > 0
+    ))
+    invoice_line_charges = sorted(set(
+        round(float(x.get("charge")), 2)
+        for x in line_items
+        if x.get("charge") is not None and float(x.get("charge")) > 0
+    ))
+
+    def _row_value_matches_invoice(row_value) -> bool:
+        if row_value is None or pd.isna(row_value):
+            return False
+        try:
+            row_value = round(float(row_value), 2)
+        except Exception:
+            return False
+        check_values = invoice_line_rates + invoice_line_charges + [
+            round(float(v), 2) for v in invoice_values if v is not None and not pd.isna(v)
+        ]
+        return any(close_money(row_value, v, 0.03) for v in check_values)
+
+    used_plant_rows = []
+    ignored_plant_rows = []
+    if not matched_rows.empty:
+        for _, audit_row in matched_rows.iterrows():
+            row_no = clean_cell(audit_row.get("__row_number", ""))
+            desc = clean_cell(audit_row.get("__description", ""))
+            cost = audit_row.get("__cost", None)
+            cost_text = f"£{float(cost):.2f}" if cost is not None and not pd.isna(cost) else ""
+            label = " | ".join([part for part in [f"Row {row_no}" if row_no else "", desc, cost_text] if part])
+            if _row_value_matches_invoice(cost):
+                used_plant_rows.append(label)
+            else:
+                ignored_plant_rows.append(label)
+
+    warning_flags = []
+    if matched and ignored_plant_rows:
+        warning_flags.append("PO contains additional Plant rows not billed on this invoice")
+    if not supplier_email:
+        warning_flags.append("No supplier email detected")
+    if not invoice_line_rates and not invoice_line_charges:
+        warning_flags.append("No structured invoice line rates detected")
+
+    if matched and refs and not warning_flags:
+        confidence_level = "High"
+    elif matched:
+        confidence_level = "High - with notes"
+    else:
+        confidence_level = "Review required"
+
     supplier_email = extract_supplier_email(text)
     status = "Matched" if matched else "Unmatched"
     return {
@@ -1618,6 +1673,13 @@ def reconcile_invoice(inv: Dict, plant_df: pd.DataFrame) -> Dict:
         "Matched Plant Row(s)": ", ".join(plant_rows),
         "Match Status": status,
         "Unmatched Reason": "" if matched else reason,
+        "Match Reason": reason if matched else "",
+        "Plant Rows Checked": ", ".join(plant_rows),
+        "Plant Rows Used": "; ".join(used_plant_rows),
+        "Ignored PO Lines": "; ".join(ignored_plant_rows),
+        "Invoice Lines Used": "; ".join([f"Rate £{x.get('rate', 0):.2f} / Charge £{x.get('charge', 0):.2f}" for x in line_items[:20] if x.get("rate") is not None]),
+        "Warning Flags": "; ".join(warning_flags),
+        "Confidence Level": confidence_level,
         "Variance": f"£{variance:.2f}" if variance is not None else "",
         "Pages": ", ".join(map(str, inv.get("pages", []))),
     }
@@ -1923,6 +1985,42 @@ def render_selected_file_card(uploaded_file, file_kind="excel"):
     )
 
 
+
+AUDIT_TRAIL_COLUMNS = [
+    "PDF File",
+    "Invoice Number",
+    "Supplier",
+    "Order Reference",
+    "Match Status",
+    "Confidence Level",
+    "Match Reason",
+    "Unmatched Reason",
+    "Plant Rows Checked",
+    "Plant Rows Used",
+    "Ignored PO Lines",
+    "Agreed Rate / Value",
+    "Invoice Values Found",
+    "Pro-Rata Lines Found",
+    "Invoice Lines Used",
+    "Warning Flags",
+]
+
+
+def make_audit_trail_df(df: pd.DataFrame) -> pd.DataFrame:
+    """Build a readable audit trail tab for the Excel export.
+
+    The app screen layout remains unchanged. This tab gives the working behind
+    each decision so matched invoices can be checked without guessing.
+    """
+    if df is None or df.empty:
+        return pd.DataFrame(columns=AUDIT_TRAIL_COLUMNS)
+    out = df.copy()
+    for col in AUDIT_TRAIL_COLUMNS:
+        if col not in out.columns:
+            out[col] = ""
+    return out[AUDIT_TRAIL_COLUMNS]
+
+
 def make_excel(summary_df, matched_df, unmatched_df, all_df) -> bytes:
     output = io.BytesIO()
     rules_df = pd.DataFrame({
@@ -1938,11 +2036,13 @@ def make_excel(summary_df, matched_df, unmatched_df, all_df) -> bytes:
             "Excel exports use filters, frozen headers and auto-sized columns.",
         ]
     })
+    audit_df = make_audit_trail_df(all_df)
     dfs = {
         "Summary": summary_df,
         "Matched": clean_excel_output_df(matched_df),
         "Unmatched": clean_excel_output_df(unmatched_df),
         "All Extracted Invoices": clean_excel_output_df(all_df),
+        "Audit Trail": audit_df,
         "Rules": rules_df,
     }
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
