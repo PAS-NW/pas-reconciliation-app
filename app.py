@@ -1289,7 +1289,7 @@ def extract_rate_charge_lines(text: str) -> List[Dict[str, float]]:
         # i.e. charge before item/status, rate after weeks/days. Capture this
         # directly so a partial invoice under a larger PO can validate correctly.
         m_syn = re.search(
-            r"(?:\d+\.\d{2})\s+([0-9]{1,5}\.\d{2})\s*(?:O/H|CONT|OH|CO)?[A-Z0-9/ -]{0,180}?"
+            r"\b(?:\d+\.\d{2})\s+([0-9]{1,5}\.\d{2})\s*(?:O/H|CONT|OH|CO)?[A-Z0-9/ -]{0,180}?"
             r"(\d+)\s*/\s*(\d+)\s+([0-9]{1,5}\.\d{2})\s*(?:20\.00%|20%|VAT)?",
             line,
             re.I,
@@ -1315,7 +1315,7 @@ def extract_rate_charge_lines(text: str) -> List[Dict[str, float]]:
             except Exception:
                 pass
 
-        if len(nums) >= 2 and re.search(r"(\d+\s*/\s*\d+|/\s*\d+)", line):
+        if len(nums) >= 2 and re.search(r"\b(\d+\s*/\s*\d+|/\s*\d+)\b", line):
             # If format looks like quantity, charge, rate, use charge/rate order.
             # Otherwise keep the normal rate/charge order.
             if len(nums) >= 3 and nums[0] <= 10 and nums[-1] < nums[-2]:
@@ -1340,6 +1340,64 @@ def calculated_invoice_values(text: str) -> List[float]:
         if v > 0 and v not in out:
             out.append(v)
     return out
+
+
+def extract_invoice_net_total_value(text: str, line_items: Optional[List[Dict[str, float]]] = None) -> Optional[float]:
+    """Best effort invoice value before VAT for the Summary tab.
+
+    Uses structured line charges first so split invoices and partial PO invoices
+    total correctly, then falls back to explicit net/goods/sub-total labels.
+    """
+    line_items = line_items or []
+    charges = []
+    for item in line_items:
+        charge = item.get("charge")
+        if charge is not None:
+            try:
+                charge = float(charge)
+                if charge > 0:
+                    charges.append(round(charge, 2))
+            except Exception:
+                pass
+    if charges:
+        return round(sum(charges), 2)
+
+    compact = re.sub(r"\s+", " ", text.replace("\xa0", " ")).strip()
+    for p in [
+        r"Goods\s+Total\s*£?\s*([0-9,]+\.\d{2})",
+        r"NET\s*£\s*([0-9,]+\.\d{2})",
+        r"Sub-?Total\s*£?\s*([0-9,]+\.\d{2})",
+        r"Net\s+value\s*£?\s*([0-9,]+\.\d{2})",
+    ]:
+        m = re.search(p, compact, re.I)
+        if m:
+            return money_to_float(m.group(1))
+
+    # Labels can extract before values, e.g. Goods/VAT/Invoice Total then
+    # £1,278.00 / £1,065.00 / £213.00. Infer net as gross - VAT.
+    gt = re.search(r"Goods\s+Total", compact, re.I)
+    if gt and re.search(r"VAT\s+Total", compact, re.I):
+        window = compact[gt.start():gt.start()+650]
+        vals = []
+        for m in re.finditer(r"£?\s*([0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)\.([0-9]{2})", window):
+            try:
+                v = float(f"{m.group(1).replace(',', '')}.{m.group(2)}")
+                if v > 0 and v not in vals:
+                    vals.append(v)
+            except Exception:
+                pass
+        if len(vals) >= 3:
+            for gross in vals:
+                for vat in vals:
+                    if gross == vat:
+                        continue
+                    net = round(gross - vat, 2)
+                    if net > 0 and any(close_money(net, x, 0.02) for x in vals):
+                        return net
+        if vals:
+            return sorted(vals)[-2] if len(vals) > 1 else vals[0]
+
+    return None
 
 
 def values_match(plant_values: List[float], invoice_values: List[float], line_items: Optional[List[Dict[str, float]]] = None, tolerance: float = 0.02) -> Tuple[bool, str, Optional[float]]:
@@ -1402,14 +1460,17 @@ def values_match(plant_values: List[float], invoice_values: List[float], line_it
             if not unmatched_rates:
                 return True, "Weekly rates matched and pro-rata hire charges validated", 0.0
 
-        # Multiple Plant rows / multiple invoice lines case: every invoice line rate must be present on Plant.
+        # Partial PO invoice rule:
+        # an invoice may contain only some lines from the Plant order. It should
+        # match if every INVOICE line rate exists somewhere on the Plant PO.
+        # Extra Plant rows under the same PO must NOT create a discrepancy.
         if line_rates:
             unmatched_rates = []
             for rate in line_rates:
                 if not any(close_money(rate, pv, tolerance) for pv in plant_values):
                     unmatched_rates.append(rate)
             if not unmatched_rates:
-                return True, "Invoice line rates matched Plant values", 0.0
+                return True, "Invoice line rates matched Plant values under PO", 0.0
             return False, "Additional or unmatched invoice charge line found", None
 
     # Fallback: direct value/rate matching where no structured lines were found.
@@ -1520,13 +1581,9 @@ def reconcile_invoice(inv: Dict, plant_df: pd.DataFrame) -> Dict:
     for v in calculated_invoice_values(text):
         if v not in invoice_values:
             invoice_values.append(v)
-    net_total = None
-    # Find net total/goods value for display.
-    for p in [r"Goods\s+Total\s*£?\s*([0-9,]+\.\d{2})", r"NET\s*£\s*([0-9,]+\.\d{2})", r"Sub-Total\s*£?\s*([0-9,]+\.\d{2})", r"Net\s+value\s*\n?\s*([0-9,]+\.\d{2})"]:
-        m = re.search(p, text, re.I)
-        if m:
-            net_total = money_to_float(m.group(1))
-            break
+    # Hidden operational value used for Summary totals before VAT.
+    # It is intentionally not shown in the exported main columns.
+    net_total = extract_invoice_net_total_value(text, line_items)
 
     order_ref = refs[0] if refs else ""
     normalised_order_ref = normalize_order_ref(order_ref) if order_ref else ""
