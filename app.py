@@ -1285,8 +1285,30 @@ def extract_rate_charge_lines(text: str) -> List[Dict[str, float]]:
         if re.search(r"\b(invoice total|vat total|goods total|sort code|account no|payment details)\b", low):
             continue
         nums = [float(x) for x in re.findall(r"(?<![A-Z0-9/])([0-9]{1,5}\.[0-9]{2})(?!\s*%)(?![A-Z0-9/])", line)]
-        if len(nums) >= 2 and re.search(r"\b(\d+\s*/\s*\d+|/\s*\d+)\b", line):
-            add(nums[-2], nums[-1], None, "table row rate/charge")
+        wd = re.search(r"\b(\d+)\s*/\s*(\d+)\b", line)
+        if len(nums) >= 2 and wd:
+            weeks = int(wd.group(1) or 0)
+            days = int(wd.group(2) or 0)
+            chargeable_days = weeks * 5 + days
+
+            # Most hire tables are: ... weekly_rate total_charge.
+            # Some suppliers, such as Synergy, extract as:
+            # qty total_charge ... weeks/days weekly_rate VAT%.
+            # Detect that by checking which pairing satisfies rate / 5 * chargeable_days = charge.
+            standard_rate, standard_charge = nums[-2], nums[-1]
+            reversed_rate, reversed_charge = nums[-1], nums[-2]
+
+            if chargeable_days:
+                expected_standard = round(standard_rate / 5 * chargeable_days, 2)
+                expected_reversed = round(reversed_rate / 5 * chargeable_days, 2)
+                if close_money(expected_reversed, reversed_charge, 0.03):
+                    add(reversed_rate, reversed_charge, chargeable_days, "table row reversed rate/charge")
+                elif close_money(expected_standard, standard_charge, 0.03):
+                    add(standard_rate, standard_charge, chargeable_days, "table row rate/charge")
+                else:
+                    add(standard_rate, standard_charge, chargeable_days, "table row rate/charge fallback")
+            else:
+                add(standard_rate, standard_charge, None, "table row rate/charge")
 
     return rows
 
