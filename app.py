@@ -1284,45 +1284,9 @@ def extract_rate_charge_lines(text: str) -> List[Dict[str, float]]:
             continue
         if re.search(r"\b(invoice total|vat total|goods total|sort code|account no|payment details)\b", low):
             continue
-
-        # Synergy/other table extraction can appear as:
-        #   1.00  90.00O/H501B ... 3 / 0  30.0020%
-        # i.e. charge before item/status, rate after weeks/days. Capture this
-        # directly so a partial invoice under a larger PO can validate correctly.
-        m_syn = re.search(
-            r"\b(?:\d+\.\d{2})\s+([0-9]{1,5}\.[0-9]{2})\s*(?:O/H|CONT|OH|CO)?[A-Z0-9/ -]{0,180}?"
-            r"(\d+)\s*/\s*(\d+)\s+([0-9]{1,5}\.[0-9]{2})\s*(?:20\.00%|20%|VAT)?",
-            line,
-            re.I,
-        )
-        if m_syn:
-            charge = float(m_syn.group(1))
-            weeks = int(m_syn.group(2) or 0)
-            days = int(m_syn.group(3) or 0)
-            rate = float(m_syn.group(4))
-            add(rate, charge, weeks * 5 + days, "charge-before-rate table row")
-            continue
-
-        # General table row fallback. Pull plain decimal values, including values
-        # joined to text such as 90.00O/H, but ignore VAT percentages.
-        nums = []
-        for m in re.finditer(r"([0-9]{1,5}\.[0-9]{2})", line):
-            end = m.end()
-            tail = line[end:end+2]
-            if re.match(r"\s*%", tail):
-                continue
-            try:
-                nums.append(float(m.group(1)))
-            except Exception:
-                pass
-
+        nums = [float(x) for x in re.findall(r"(?<![A-Z0-9/])([0-9]{1,5}\.[0-9]{2})(?!\s*%)(?![A-Z0-9/])", line)]
         if len(nums) >= 2 and re.search(r"\b(\d+\s*/\s*\d+|/\s*\d+)\b", line):
-            # If format looks like quantity, charge, rate, use charge/rate order.
-            # Otherwise keep the normal rate/charge order.
-            if len(nums) >= 3 and nums[0] <= 10 and nums[-1] < nums[-2]:
-                add(nums[-1], nums[-2], None, "table row charge/rate")
-            else:
-                add(nums[-2], nums[-1], None, "table row rate/charge")
+            add(nums[-2], nums[-1], None, "table row rate/charge")
 
     return rows
 
@@ -1590,24 +1554,30 @@ def style_excel(writer, dfs: Dict[str, pd.DataFrame]):
     from openpyxl.utils import get_column_letter
 
     header_fill = PatternFill("solid", fgColor="FFD400")
-    black_font = Font(color="000000", bold=True)
     thin = Side(style="thin", color="D9D9D9")
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    body_font = Font(name="Calibri", size=10, color="000000")
+    header_font = Font(name="Calibri", size=10, color="000000", bold=True)
+    centre = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
     for sheet_name, df in dfs.items():
         ws = writer.book[sheet_name]
         ws.freeze_panes = "A2"
+        ws.row_dimensions[1].height = 25
         if df.shape[0] >= 0 and df.shape[1] > 0:
             ws.auto_filter.ref = ws.dimensions
+
+        for row in ws.iter_rows():
+            for cell in row:
+                cell.font = body_font
+                cell.border = border
+                cell.alignment = centre
+
         for cell in ws[1]:
             cell.fill = header_fill
-            cell.font = black_font
-            cell.border = border
-            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-        for row in ws.iter_rows(min_row=2):
-            for cell in row:
-                cell.border = border
-                cell.alignment = Alignment(vertical="top", wrap_text=True)
+            cell.font = header_font
+            cell.alignment = centre
+
         for idx, col in enumerate(ws.columns, start=1):
             max_len = 0
             for cell in col:
@@ -1616,12 +1586,33 @@ def style_excel(writer, dfs: Dict[str, pd.DataFrame]):
             width = min(max(max_len + 2, 10), 42)
             ws.column_dimensions[get_column_letter(idx)].width = width
 
+        # Hide Supplier Email in Excel output if present, while preserving it in the app for mailto links.
+        for idx, cell in enumerate(ws[1], start=1):
+            if str(cell.value).strip().lower() == "supplier email":
+                ws.column_dimensions[get_column_letter(idx)].hidden = True
+
+    # Keep the Rules tab available for reference but hidden from normal view.
+    if "Rules" in writer.book.sheetnames:
+        writer.book["Rules"].sheet_state = "hidden"
+
 
 OUTPUT_COLUMNS = [
     "PDF File",
     "Invoice Number",
     "Supplier",
     "Supplier Email",
+    "Order Reference",
+    "Invoice Type",
+    "Plant Status",
+    "Agreed Rate / Value",
+    "Match Status",
+    "Unmatched Reason",
+]
+
+EXCEL_OUTPUT_COLUMNS = [
+    "PDF File",
+    "Invoice Number",
+    "Supplier",
     "Order Reference",
     "Invoice Type",
     "Plant Status",
@@ -1639,6 +1630,41 @@ def clean_output_df(df: pd.DataFrame) -> pd.DataFrame:
         if col not in out.columns:
             out[col] = ""
     return out[OUTPUT_COLUMNS]
+
+
+def clean_excel_output_df(df: pd.DataFrame) -> pd.DataFrame:
+    """Clean operational Excel output without the Supplier Email column."""
+    if df is None or df.empty:
+        return pd.DataFrame(columns=EXCEL_OUTPUT_COLUMNS)
+    out = df.copy()
+    for col in EXCEL_OUTPUT_COLUMNS:
+        if col not in out.columns:
+            out[col] = ""
+    return out[EXCEL_OUTPUT_COLUMNS]
+
+
+def currency_to_float(value) -> float:
+    """Parse values like £1,065.00 from reconciliation rows for summary totals."""
+    if value is None or pd.isna(value):
+        return 0.0
+    if isinstance(value, (int, float)):
+        return float(value)
+    text = str(value)
+    m = re.search(r"-?£?\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)(?:\.([0-9]{2}))?", text)
+    if not m:
+        return 0.0
+    whole = m.group(1).replace(",", "")
+    dec = m.group(2) or "00"
+    try:
+        return float(f"{whole}.{dec}")
+    except Exception:
+        return 0.0
+
+
+def invoice_net_total_sum(df: pd.DataFrame) -> float:
+    if df is None or df.empty or "Invoice Net Total" not in df.columns:
+        return 0.0
+    return round(sum(currency_to_float(v) for v in df["Invoice Net Total"]), 2)
 
 
 
@@ -1821,9 +1847,9 @@ def make_excel(summary_df, matched_df, unmatched_df, all_df) -> bytes:
     })
     dfs = {
         "Summary": summary_df,
-        "Matched": clean_output_df(matched_df),
-        "Unmatched": clean_output_df(unmatched_df),
-        "All Extracted Invoices": clean_output_df(all_df),
+        "Matched": clean_excel_output_df(matched_df),
+        "Unmatched": clean_excel_output_df(unmatched_df),
+        "All Extracted Invoices": clean_excel_output_df(all_df),
         "Rules": rules_df,
     }
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
@@ -1852,12 +1878,6 @@ with up_col2:
 
 run = st.button("▶  Run reconciliation", use_container_width=True)
 
-# Keep reconciliation results on screen after Streamlit reruns, e.g. when the
-# Download Excel button is clicked. This does not alter layout; it only stores
-# the latest successful run in session state.
-if "reconciliation_results" not in st.session_state:
-    st.session_state["reconciliation_results"] = None
-
 if run:
     if not plant_file or not invoice_files:
         st.warning("Please upload both the Plant workbook and invoice files/ZIP.")
@@ -1881,60 +1901,59 @@ if run:
         unmatched = len(unmatched_df)
         match_pct = round((matched / total) * 100, 1) if total else 0.0
 
-        summary_df = pd.DataFrame({
-            "Metric": ["Total invoices", "Matched", "Unmatched", "Match percentage", "Run date/time"],
-            "Value": [total, matched, unmatched, f"{match_pct}%", datetime.now().strftime("%d/%m/%Y %H:%M")],
-        })
-        excel_bytes = make_excel(summary_df, matched_df, unmatched_df, all_df)
+        total_value = invoice_net_total_sum(all_df)
+        matched_value = invoice_net_total_sum(matched_df)
+        unmatched_value = invoice_net_total_sum(unmatched_df)
 
-        st.session_state["reconciliation_results"] = {
-            "summary_df": summary_df,
-            "matched_df": matched_df,
-            "unmatched_df": unmatched_df,
-            "all_df": all_df,
-            "excel_bytes": excel_bytes,
-            "total": total,
-            "matched": matched,
-            "unmatched": unmatched,
-            "match_pct": match_pct,
-            "download_filename": f"PAS_Reconciliation_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
-        }
+        summary_df = pd.DataFrame({
+            "Metric": [
+                "Total invoices",
+                "Matched",
+                "Unmatched",
+                "Match percentage",
+                "Total value before VAT - all invoices",
+                "Total value before VAT - matched invoices",
+                "Total value before VAT - unmatched invoices",
+                "Run date/time",
+            ],
+            "Value": [
+                total,
+                matched,
+                unmatched,
+                f"{match_pct}%",
+                f"£{total_value:,.2f}",
+                f"£{matched_value:,.2f}",
+                f"£{unmatched_value:,.2f}",
+                datetime.now().strftime("%d/%m/%Y %H:%M"),
+            ],
+        })
+
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            st.markdown(f'<div class="kpi-card"><div class="kpi-icon"><svg viewBox="0 0 24 24"><path d="M8 7V3h8l4 4v14H6V7z"/><path d="M16 3v5h5"/><path d="M9 13h6"/><path d="M9 17h4"/><path d="M4 7h2v14h12"/></svg></div><div><div class="kpi-label">Total invoices</div><div class="kpi-value">{total}</div><div class="kpi-sub">Detected records</div></div></div>', unsafe_allow_html=True)
+        with c2:
+            st.markdown(f'<div class="kpi-card kpi-matched"><div class="kpi-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16.5 9"/></svg></div><div><div class="kpi-label">Matched</div><div class="kpi-value">{matched}</div><div class="kpi-sub">Approved candidates</div></div></div>', unsafe_allow_html=True)
+        with c3:
+            st.markdown(f'<div class="kpi-card kpi-unmatched"><div class="kpi-icon"><svg viewBox="0 0 24 24"><path d="M12 3l10 18H2L12 3z"/><path d="M12 9v5"/><path d="M12 18h.01"/></svg></div><div><div class="kpi-label">Unmatched</div><div class="kpi-value">{unmatched}</div><div class="kpi-sub">Need review</div></div></div>', unsafe_allow_html=True)
+        with c4:
+            st.markdown(f'<div class="kpi-card"><div class="kpi-icon"><svg viewBox="0 0 24 24"><path d="M3 20h18"/><path d="M6 16v-4"/><path d="M11 16V8"/><path d="M16 16v-6"/><path d="M19 6l-5 5-3-3-5 5"/></svg></div><div><div class="kpi-label">Match %</div><div class="kpi-value">{match_pct}%</div><div class="kpi-sub">Core KPI</div></div></div>', unsafe_allow_html=True)
+
+        st.markdown('<div class="pas-results-title">Results</div>', unsafe_allow_html=True)
+        render_unmatched_table(unmatched_df)
+        
+        excel_bytes = make_excel(summary_df, matched_df, unmatched_df, all_df)
+        dl_left, dl_right = st.columns([1.8, 1])
+        with dl_right:
+            st.download_button(
+                "⬇  Download Excel reconciliation",
+                data=excel_bytes,
+                file_name=f"PAS_Reconciliation_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+            )
     except Exception as e:
         st.error(f"Something went wrong: {e}")
         st.exception(e)
-
-results = st.session_state.get("reconciliation_results")
-
-if results is not None:
-    total = results["total"]
-    matched = results["matched"]
-    unmatched = results["unmatched"]
-    match_pct = results["match_pct"]
-    unmatched_df = results["unmatched_df"]
-    excel_bytes = results["excel_bytes"]
-
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        st.markdown(f'<div class="kpi-card"><div class="kpi-icon"><svg viewBox="0 0 24 24"><path d="M8 7V3h8l4 4v14H6V7z"/><path d="M16 3v5h5"/><path d="M9 13h6"/><path d="M9 17h4"/><path d="M4 7h2v14h12"/></svg></div><div><div class="kpi-label">Total invoices</div><div class="kpi-value">{total}</div><div class="kpi-sub">Detected records</div></div></div>', unsafe_allow_html=True)
-    with c2:
-        st.markdown(f'<div class="kpi-card kpi-matched"><div class="kpi-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16.5 9"/></svg></div><div><div class="kpi-label">Matched</div><div class="kpi-value">{matched}</div><div class="kpi-sub">Approved candidates</div></div></div>', unsafe_allow_html=True)
-    with c3:
-        st.markdown(f'<div class="kpi-card kpi-unmatched"><div class="kpi-icon"><svg viewBox="0 0 24 24"><path d="M12 3l10 18H2L12 3z"/><path d="M12 9v5"/><path d="M12 18h.01"/></svg></div><div><div class="kpi-label">Unmatched</div><div class="kpi-value">{unmatched}</div><div class="kpi-sub">Need review</div></div></div>', unsafe_allow_html=True)
-    with c4:
-        st.markdown(f'<div class="kpi-card"><div class="kpi-icon"><svg viewBox="0 0 24 24"><path d="M3 20h18"/><path d="M6 16v-4"/><path d="M11 16V8"/><path d="M16 16v-6"/><path d="M19 6l-5 5-3-3-5 5"/></svg></div><div><div class="kpi-label">Match %</div><div class="kpi-value">{match_pct}%</div><div class="kpi-sub">Core KPI</div></div></div>', unsafe_allow_html=True)
-
-    st.markdown('<div class="pas-results-title">Results</div>', unsafe_allow_html=True)
-    render_unmatched_table(unmatched_df)
-
-    dl_left, dl_right = st.columns([1.8, 1])
-    with dl_right:
-        st.download_button(
-            "⬇  Download Excel reconciliation",
-            data=excel_bytes,
-            file_name=results["download_filename"],
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
-        )
 else:
     st.info("Upload your Plant workbook and invoice PDFs/ZIP, then click Run reconciliation.")
     render_bottom_chase()
