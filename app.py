@@ -1648,14 +1648,22 @@ def reconcile_invoice(inv: Dict, plant_df: pd.DataFrame) -> Dict:
     if not invoice_line_rates and not invoice_line_charges:
         warning_flags.append("No structured invoice line rates detected")
 
-    # Operated Plant override: any invoice linked to a Plant row/status containing
-    # "Operated Plant" must be queried manually, even if the values otherwise match.
+    # Operated Plant override: any invoice linked to a Plant row/status OR Plant
+    # item description containing "operated" must be queried manually, even if
+    # the values otherwise match. This catches operated machinery that has since
+    # been off-hired, where the Status may now say "Off-Hired" rather than
+    # "Operated Plant".
     operated_plant_override = False
     if not matched_rows.empty:
         plant_statuses_all = " ".join(
             clean_cell(x) for x in matched_rows["__status"].fillna("").tolist()
         ).lower()
-        if "operated plant" in plant_statuses_all or "operated" in plant_statuses_all:
+        plant_descriptions_all = " ".join(
+            clean_cell(x) for x in matched_rows["__description"].fillna("").tolist()
+        ).lower()
+        operated_check_text = f"{plant_statuses_all} {plant_descriptions_all}"
+
+        if "operated plant" in operated_check_text or "operated" in operated_check_text:
             operated_plant_override = True
             matched = False
             reason = "Operated Plant requires manual review"
