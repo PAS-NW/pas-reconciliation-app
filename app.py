@@ -1611,7 +1611,7 @@ def make_query_email_link(row) -> str:
     """Create a mailto link for querying an unmatched invoice.
 
     This opens the user's default mail client, sends to the supplier email
-    found on the invoice where available, CCs invoice@pasnw.co.uk,
+    found on the invoice where available, CCs invoices@pasnw.co.uk,
     and prepares a supplier query email.
     """
     invoice_no = clean_cell(row.get("Invoice Number", "Unknown")) or "Unknown"
@@ -1640,7 +1640,7 @@ def make_query_email_link(row) -> str:
     )
 
     to_part = quote(supplier_email) if supplier_email else ""
-    return f"mailto:{to_part}?cc=invoice@pasnw.co.uk&subject={quote(subject)}&body={quote(body)}"
+    return f"mailto:{to_part}?cc=invoices@pasnw.co.uk&subject={quote(subject)}&body={quote(body)}"
 
 
 def add_query_email_column(df: pd.DataFrame) -> pd.DataFrame:
@@ -1720,7 +1720,7 @@ def render_unmatched_table(df: pd.DataFrame):
       </table>
     </div>
     <div class="pas-note">
-      Showing {min(len(display_df), 10)} of {len(display_df)} unmatched invoice(s). Query Supplier opens a pre-filled email draft to the supplier email where found, with invoice@pasnw.co.uk CC'd.
+      Showing {min(len(display_df), 10)} of {len(display_df)} unmatched invoice(s). Query Supplier opens a pre-filled email draft to the supplier email where found, with invoices@pasnw.co.uk CC'd.
     </div>
     """
     st.markdown(table_html, unsafe_allow_html=True)
@@ -1858,7 +1858,7 @@ if run:
         render_unmatched_table(unmatched_df)
         st.markdown(
             '<div class="pas-support">For queries or support contact: '
-            '<a href="mailto:invoice@pasnw.co.uk">invoice@pasnw.co.uk</a>'
+            '<a href="mailto:invoices@pasnw.co.uk">invoices@pasnw.co.uk</a>'
             '&nbsp;&nbsp;&nbsp;'
             '<a href="mailto:plant@pasnw.co.uk">plant@pasnw.co.uk</a>'
             '</div>',
